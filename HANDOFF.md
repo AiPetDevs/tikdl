@@ -13,23 +13,22 @@ owner's TransferBar sample), owner remark R3 (bar moves for links without size),
 - Bare link (no `?size=&name=`): size learned from sender, progress, file identical (rechecked 2026-11-23 23:43).
 - All gates green: `cargo test` 6/6, `ui_check` 0/0/0, ESLint clean, `ui_smoke` 4/4.
 
+- 2026-11-24: menu bar icon, close → keeps sharing, «Открыть»/«Выйти» (W7); drag file+folder from Finder (W8);
+  bar on a bare link (R3). Notification is sent (in macOS notification DB) — see below.
+
 ## NOT verified
-- Menu bar icon, window close → app stays, sharing while the window is closed, «Открыть»/«Выйти» (W7).
-- Drag files onto the window in the real app (W8; only the mock UI was checked).
-- Notification «Готово» seen by eye (W9; no error in the log).
-- The bar's look after the last core changes (screen was locked; data part checked).
+- Notification banner seen by eye: System Settings → Notifications → TikDL «Allow notifications» is OFF on this Mac.
+  Owner's choice to turn it on. (A real user gets the macOS prompt on first notification — not checked.)
+- Dock-icon click reopening the window.
 - https link via GitHub Pages (needs repo on GitHub + Settings → Pages → Source = GitHub Actions).
 - Windows/Linux at all; CI never run; clippy never run locally.
-Reason for W7–W9: the Mac screen was locked; macOS blocks window capture and input then.
 
 ## Next step (exact)
-With the screen unlocked: run W7, W8, W9 from `docs/plans/ACCEPT.md` on the `.app` (driver: computer-use `app_*` on
-`app.tikdl.desktop`; close via menu File → Close Window; drag needs full-screen control from Finder). Record with
-`accept.py run`, then close owner asks A5–A8 (`python3 ~/.claude/hooks/owner_asks.py --done ID "…"`, run from the
-project root one level up). Then update `docs/answers/weak-points.html`.
+Owner decides: build a dmg for own use now (`cd src-tauri && cargo tauri build` → arm64 only), or wait for an Apple
+Developer certificate (signing + notarization) and a universal build via GitHub Actions.
 
 ## Open owner asks
-A5 «Исправь», A6 menu bar, A7 drag, A8 notification — status wip (made, not verified). A9, A10 done.
+None from this session (A5–A10, A13, A14 closed).
 
 ## Traps
 - Do NOT export downloads with `ExportMode::TryReference`: the store keeps an `External` entry pointing at the moved
