@@ -171,3 +171,4 @@ Owner remarks R1, R2 (`docs/UI_REMARKS.md`). "Done" only after each line was run
 | Deep link from the dmg copy | NOT checked: the copy was in a temp folder, macOS does not bind `tikdl://` to apps there; a stale registration from the unmounted dmg also swallowed links. Deep links were checked earlier on the target/ build |
 | Intel Mac, another Mac (Gatekeeper prompt) | NOT checked: no such machine here |
 Output: `../_RESULTS/TikDL_0.1.0_universal.dmg`.
+- run: 2026-11-24T14:54:20-05:00 · result: ok · evidence: <project>/docs/plans/evidence/dmg_app_download.jpg (mtime 2026-11-24T14:54:03-05:00) · note: dmg собран (universal, 20.8 МБ, verify VALID), в нём TikDL + Applications; приложение из dmg скачало 50 МБ, файл совпадает. Не проверено: ссылка tikdl:// для копии из dmg (копия во временной папке), Intel-Mac и предупреждение Gatekeeper на другом Mac
