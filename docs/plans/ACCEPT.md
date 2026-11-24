@@ -154,3 +154,20 @@ Owner remarks R1, R2 (`docs/UI_REMARKS.md`). "Done" only after each line was run
 | W9 | PARTIAL: notification is sent — macOS notification DB has records «Готово / Скачано: ui-test.bin» at each finish (14:39:31, 14:40:57). Not shown as a banner because System Settings → Notifications → TikDL «Allow notifications» is OFF (`notifications_setting_off.jpg`). Owner decides whether to turn it on |
 | R3 recheck | PASSED: bare link (no size) → real name «ui-test.bin», bar grows 182.5 → 317.1 МБ из 400.0 МБ at ~66 МБ/с, then green «готово»; file identical (`bar_bare_link_*.jpg`) |
 - run: 2026-11-24T14:42:39-05:00 · result: ok · evidence: <project>/docs/plans/evidence/menu_bar_menu.jpg (mtime 2026-11-24T14:42:14-05:00) · app: <project>/src-tauri/target/release/bundle/macos/TikDL.app/Contents/MacOS/tikdl pid 9931 started 2026-11-24T14:42:30-05:00 built 2026-11-23T23:36:54-05:00 · note: W1–W4, W6–W8 прошли (W7, W8 — 24.11 вживую: закрытие в строку меню, раздача при закрытом окне, Открыть/Выйти, перетаскивание файла и папки); W9: уведомление отправляется (запись в базе уведомлений macOS), баннер не виден — уведомления для TikDL выключены в Системных настройках; W5 — нет GitHub Pages
+
+## 2026-11-24 14:44 · TikDL.dmg для себя
+- written: 2026-11-24T14:44:46-05:00
+- where: dmg в _RESULTS проекта: смонтировать, перетащить TikDL в Программы-копию, запустить
+- data: файл 50 МБ от CLI-раздающего
+- expect: dmg открывается, в нём TikDL и ярлык Applications; приложение запускается, скачивает файл без ошибок; сборка для Apple Silicon и Intel
+
+## dmg results (2026-11-24, `cargo tauri build --target universal-apple-darwin`, code `51e6b5f`)
+
+| Check | Result |
+|-------|--------|
+| Build | PASSED: `TikDL_0.1.0_universal.dmg` 20.8 MB, `hdiutil verify` VALID; app binary `x86_64 arm64`; signed ad-hoc, not notarized |
+| Contents | PASSED: mounted volume «TikDL» holds TikDL.app + Applications shortcut + volume icon |
+| Run from the dmg copy | PASSED: app opened, link pasted, 50 MB downloaded, byte-identical, green «готово» (`dmg_app_download.jpg`) |
+| Deep link from the dmg copy | NOT checked: the copy was in a temp folder, macOS does not bind `tikdl://` to apps there; a stale registration from the unmounted dmg also swallowed links. Deep links were checked earlier on the target/ build |
+| Intel Mac, another Mac (Gatekeeper prompt) | NOT checked: no such machine here |
+Output: `../_RESULTS/TikDL_0.1.0_universal.dmg`.

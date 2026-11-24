@@ -24,8 +24,8 @@ owner's TransferBar sample), owner remark R3 (bar moves for links without size),
 - Windows/Linux at all; CI never run; clippy never run locally.
 
 ## Next step (exact)
-Owner decides: build a dmg for own use now (`cd src-tauri && cargo tauri build` → arm64 only), or wait for an Apple
-Developer certificate (signing + notarization) and a universal build via GitHub Actions.
+dmg built 2026-11-24: `../_RESULTS/TikDL_0.1.0_universal.dmg` (universal, ad-hoc signed). Next: owner installs it; for wider sharing — Apple Developer
+certificate (signing + notarization). Build: `cd src-tauri && cargo tauri build --target universal-apple-darwin`.
 
 ## Open owner asks
 None from this session (A5–A10, A13, A14 closed).
