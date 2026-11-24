@@ -8,7 +8,9 @@ export const Panel = ({ accent = false, role, label } = {}, ...kids) =>
   h('section', { class: `tk-panel${accent ? ' tk-panel--accent' : ''}`, role, 'aria-label': label }, ...kids);
 
 /** Text: tone 'dim' | 'bad' | 'strong' | 'empty' (centred note for an empty list). */
+const TONES = { dim: 'tk-text--dim', bad: 'tk-text--bad', strong: 'tk-text--strong', empty: 'tk-text--dim tk-text--center' };
 export function Text(text = '', tone) {
-  const cls = { dim: 'tk-text--dim', bad: 'tk-text--bad', strong: 'tk-text--strong', empty: 'tk-text--dim tk-text--center' }[tone] || '';
-  return h('div', { class: cls, text });
+  return h('div', { class: TONES[tone] || '', text });
 }
+/** Change a Text's tone in place (status lines that turn into errors). */
+export function retone(el, tone) { el.className = TONES[tone] || ''; }

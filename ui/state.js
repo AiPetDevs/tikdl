@@ -15,7 +15,8 @@ const S = {
   preparing: null,        // {done, total} while a share is being hashed
   shareError: '',
   queue: [],
-  confirm: null,          // {link, info}
+  confirm: null,          // {link, title, meta, peek}
+  dragging: false,        // files are being dragged over the window
 };
 export const get = () => S;
 
@@ -104,6 +105,26 @@ async function nextLink() {
   } catch (e) { S.linkError = String(e); emit('form'); return nextLink(); }
   emit('confirm', S.confirm);
 }
+/** "Что внутри?": only on the user's request the node contacts the sender before the decision. */
+export async function peekConfirm() {
+  const c = S.confirm; if (!c) return;
+  c.peek = { state: 'loading' }; emit('confirm', c);
+  try { c.peek = { state: 'done', ...await api.peekLink(c.link, S.dest) }; }
+  catch (e) { c.peek = { state: 'error', error: String(e) }; }
+  if (S.confirm === c) emit('confirm', c);
+}
+const MAX_FILES_SHOWN = 8;
+/** What the confirm card shows after "Что внутри?". */
+export function peekView(p) {
+  if (!p) return null;
+  if (p.state === 'loading') return { status: { text: 'Спрашиваем у отправителя…', tone: 'dim' }, files: [] };
+  if (p.state === 'error') return { status: { text: p.error, tone: 'bad' }, files: [] };
+  const list = p.files.slice(0, MAX_FILES_SHOWN).map(([name, size]) => ({ name, size: bytes(size) }));
+  const more = p.files.length - list.length;
+  const free = p.free != null ? ` · свободно ${bytes(p.free)}` : '';
+  const status = p.space_error ? { text: p.space_error, tone: 'bad' } : { text: `${files(p.files.length)} · ${bytes(p.total)}${free}`, tone: 'dim' };
+  return { status, files: list, more: more > 0 ? `и ещё ${files(more)}` : '' };
+}
 export function answerConfirm(yes) {
   const c = S.confirm; S.confirm = null; emit('confirm', null);
   if (yes && c) startDownload(c.link);
@@ -116,7 +137,7 @@ async function pullLinks() { S.queue.push(...await api.takePendingLinks()); next
 export function shareView(sh) {
   const skipped = sh.skipped ? ` · пропущено скрытых: ${sh.skipped}` : '';
   const hint = `${sh.source} — ${files(sh.files)} · ${bytes(sh.total)}${skipped}`;
-  if (sh.state === 'active') return { title: sh.name || baseName(sh.source), hint, chip: { text: 'раздаётся', tone: 'ok' }, link: sh.link, note: `${files(sh.files)} · ${bytes(sh.total)}`, actions: ['copy', 'stop'] };
+  if (sh.state === 'active') return { title: sh.name || baseName(sh.source), hint, chip: { text: 'раздаётся', tone: 'ok' }, link: shareLink(sh), note: `${files(sh.files)} · ${bytes(sh.total)}`, actions: ['copy', 'stop'] };
   return { title: sh.name || baseName(sh.source), hint, chip: { text: 'файлы изменились', tone: 'bad', hint: 'Исходные файлы изменились или удалены — раздайте заново' }, link: null, pill: { fraction: 1, text: 'не раздаётся — раздайте заново', tone: 'fail' }, actions: ['drop'] };
 }
 
@@ -124,20 +145,26 @@ export async function refreshShares() {
   try { S.shares = await api.listShares(); S.shareError = ''; } catch (e) { S.shareError = String(e); }
   emit('shares');
 }
-export async function share(directory) {
-  const path = await api.pickPath(directory);
-  if (!path) return;
-  S.preparing = { done: 0, total: null, path }; S.shareError = ''; emit('shares');
-  try { await api.sharePath(path); } catch (e) { S.shareError = String(e); }
-  S.preparing = null;
-  await refreshShares();
+/** The link to hand out: https (clickable in messengers) when the build has a landing page, else tikdl://. */
+const shareLink = sh => sh.web_link || sh.link;
+
+/** Share several files/folders one after another (picker with several items, or dropped onto the window). */
+export async function shareMany(paths) {
+  S.shareError = '';
+  for (const path of paths) {
+    S.preparing = { done: 0, total: null, path }; emit('shares');
+    try { await api.sharePath(path); } catch (e) { S.shareError = `${baseName(path)}: ${e}`; }
+    S.preparing = null;
+    await refreshShares();
+  }
 }
+export async function share(directory) { await shareMany(await api.pickPaths(directory)); }
 export function preparingView(p) {
   return { title: baseName(p.path || ''), hint: p.path, chip: { text: 'подготовка', tone: 'dim', hint: 'Подсчёт хешей — для больших файлов это занимает время' },
     pill: { fraction: p.total ? p.done / p.total : null, text: p.total ? `${p.done} из ${files(p.total)}` : 'подсчёт хешей…', tone: 'run' } };
 }
 export const shareActions = {
-  copy: root => api.copy(S.shares.find(s => s.root === root)?.link || ''),
+  copy: root => { const sh = S.shares.find(s => s.root === root); return api.copy(sh ? shareLink(sh) : ''); },
   stop: async root => { try { await api.stopShare(root); } catch (e) { S.shareError = String(e); } await refreshShares(); },
   drop: root => shareActions.stop(root),
 };
@@ -145,6 +172,11 @@ export const shareActions = {
 // ---------- start ----------
 export async function boot() {
   api.on('progress', upsert);
+  api.onDragDrop(p => {
+    const over = p.type === 'enter' || p.type === 'over';
+    if (over !== S.dragging) { S.dragging = over; emit('drag', over); }
+    if (p.type === 'drop' && p.paths?.length) { emit('goto', 'share'); shareMany(p.paths); }
+  });
   api.on('share-progress', p => { if (S.preparing) { S.preparing = { ...S.preparing, ...p }; emit('shares'); } });
   api.on('node-error', e => { S.netError = `Сеть не запустилась: ${e}`; emit('net'); });
   api.on('node-ready', () => { S.netError = ''; emit('net'); refreshShares(); });

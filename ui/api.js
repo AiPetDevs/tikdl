@@ -4,12 +4,14 @@ const T = window.__TAURI__;
 const backend = T ? {
   invoke: T.core.invoke,
   listen: T.event.listen,
-  pick: directory => T.dialog.open({ directory }),
+  pick: (directory, multiple = false) => T.dialog.open({ directory, multiple }),
   reveal: path => T.opener.revealItemInDir(path),
+  onDragDrop: cb => T.webview.getCurrentWebview().onDragDropEvent(({ payload }) => cb(payload)),
 } : (await import('./api.mock.js')).mock;
 
 export const api = {
   inspectLink: link => backend.invoke('inspect_link', { link }),
+  peekLink: (link, dest) => backend.invoke('peek_link', { link, dest }),
   defaultDownloadDir: () => backend.invoke('default_download_dir'),
   takePendingLinks: () => backend.invoke('take_pending_links'),
   listDownloads: () => backend.invoke('list_downloads'),
@@ -20,7 +22,8 @@ export const api = {
   listShares: () => backend.invoke('list_shares'),
   stopShare: root => backend.invoke('stop_share', { root }),
   pickFolder: () => backend.pick(true),
-  pickPath: directory => backend.pick(directory),
+  pickPaths: async directory => { const r = await backend.pick(directory, true); return r == null ? [] : [].concat(r); },
+  onDragDrop: cb => backend.onDragDrop(cb),
   reveal: path => backend.reveal(path),
   copy: text => navigator.clipboard.writeText(text),
   on: (event, cb) => backend.listen(event, ({ payload }) => cb(payload)),

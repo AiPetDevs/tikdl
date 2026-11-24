@@ -27,6 +27,7 @@ use iroh_blobs::{
         blobs::{AddPathOptions, ImportMode},
         downloader::{DownloadProgressItem, Shuffled},
     },
+    api::blobs::{ExportMode, ExportOptions},
     format::collection::Collection,
     protocol::{ChunkRanges, ChunkRangesSeq, GetRequest},
     hashseq::HashSeq,
@@ -114,6 +115,9 @@ pub struct Shared {
     pub name: String,
     pub source: String,
     pub link: String,
+    /// https-ссылка для мессенджеров и почты (они не делают кликабельным tikdl://). Есть, если при
+    /// сборке задан адрес страницы-прокладки TIKDL_LINK_BASE (GitHub Pages проекта).
+    pub web_link: Option<String>,
     pub files: usize,
     /// Скрытые и служебные файлы, которые не вошли в раздачу папки (.git, .env, .DS_Store …).
     pub skipped: usize,
@@ -335,6 +339,7 @@ impl Node {
             root: r.root.clone(),
             name: r.name.clone(),
             source: r.source.to_string_lossy().to_string(),
+            web_link: web_link(&link),
             link,
             files: r.files.len(),
             skipped: r.skipped,
@@ -464,33 +469,75 @@ impl Node {
         Ok(self.view(&record))
     }
 
-    /// Размер и имя раздачи — у самого раздающего, если ссылка их не несёт (голый тикет).
-    /// Без размера полоса загрузки не может показать долю. Тянет только корень и метаданные
-    /// коллекции (они нужны и самой загрузке) и последний кусок каждого файла — для размеров.
-    pub async fn probe(&self, ticket: &BlobTicket) -> Result<(u64, Option<String>)> {
+    /// Состав раздачи у самого раздающего: имена и размеры файлов, общий размер. Нужен, когда ссылка
+    /// не несёт размер (иначе полоса не может показать долю) и по кнопке «Что внутри?» до скачивания.
+    /// Тянет только корень и список имён (их потом использует и сама загрузка) и последний кусок
+    /// каждого файла — для проверенных размеров. Список имён больше 16 МБ не берём (чужой отправитель).
+    pub async fn peek(&self, ticket: &BlobTicket) -> Result<Peek> {
+        const MAX_META: u64 = 16 * 1024 * 1024;
         let root = ticket.hash();
         let addr = ticket.addr().clone();
         self.mem.add_endpoint_info(addr.clone());
         let fut = async {
             let conn = self.endpoint().connect(addr.id, iroh_blobs::ALPN).await?;
-            let (hs, sizes) = iroh_blobs::get::request::get_hash_seq_and_sizes(&conn, &root, 16 * 1024 * 1024, None)
+            let (hs, sizes) = iroh_blobs::get::request::get_hash_seq_and_sizes(&conn, &root, MAX_META, None)
                 .await
                 .map_err(|e| anyhow!("{e}"))?;
+            let meta_size = sizes.first().copied().unwrap_or(0);
+            if meta_size > MAX_META {
+                bail!("список файлов раздачи слишком большой ({meta_size} байт)");
+            }
             let total = hs.len() as u64 * 32 + sizes.iter().sum::<u64>();
-            // корень и метаданные (имена) — в хранилище загрузок, тег dl-<root> их держит
             let req = GetRequest::new(root, ChunkRangesSeq::from_ranges([ChunkRanges::all(), ChunkRanges::all()]));
-            let name = match self.dl.remote().execute_get(conn.clone(), req).await {
-                Ok(_) => Collection::load(root, self.dl.as_ref())
-                    .await
-                    .ok()
-                    .and_then(|c| c.iter().next().map(|(n, _)| n.split('/').next().unwrap_or(n).to_string())),
-                Err(_) => None,
-            };
-            Ok::<_, anyhow::Error>((total, name))
+            self.dl.remote().execute_get(conn.clone(), req).await.map_err(|e| anyhow!("{e}"))?;
+            let collection = Collection::load(root, self.dl.as_ref()).await?;
+            let files: Vec<(String, u64)> = collection
+                .iter()
+                .zip(sizes.iter().skip(1))
+                .map(|((n, _), sz)| (n.clone(), *sz))
+                .collect();
+            let name = files.first().map(|(n, _)| n.split('/').next().unwrap_or(n).to_string());
+            Ok::<_, anyhow::Error>(Peek { total, name, files })
         };
         tokio::time::timeout(Duration::from_secs(15), fut)
             .await
-            .map_err(|_| anyhow!("раздающий не ответил"))?
+            .map_err(|_| anyhow!("раздающий не ответил за 15 с"))?
+    }
+
+    /// Хватит ли места: в хранилище загрузок — на недокачанное, в папке назначения — на всё.
+    /// На одном диске файлы переносятся из хранилища без копии, поэтому нужно один раз.
+    pub async fn check_space(&self, root: Hash, total: u64, dest: &Path) -> Result<()> {
+        let local = self
+            .dl
+            .remote()
+            .local(HashAndFormat::hash_seq(root))
+            .await
+            .map(|l| l.local_bytes())
+            .unwrap_or(0);
+        let remaining = total.saturating_sub(local);
+        // запас: дерево проверки (~0.4 %) и служебные файлы
+        let margin = |n: u64| n / 100 + 64 * 1024 * 1024;
+        let store_buf = self.dir.join("downloads");
+        let store_dir = store_buf.as_path();
+        let dest_dir = existing_ancestor(dest);
+        let check = |dir: &Path, need: u64| -> Result<()> {
+            let Ok(free) = fs4::available_space(dir) else { return Ok(()) };
+            if free < need {
+                bail!(
+                    "не хватает места на диске ({}): нужно {}, свободно {}",
+                    dir.display(),
+                    human(need),
+                    human(free)
+                );
+            }
+            Ok(())
+        };
+        if same_volume(store_dir, &dest_dir) {
+            check(&dest_dir, remaining + margin(total))
+        } else {
+            check(store_dir, remaining + margin(remaining))?;
+            check(&dest_dir, total + margin(0))
+        }
     }
 
     /// Скачать по тикету в папку dest. on_progress(скачано_байт, включая скачанное раньше).
@@ -575,7 +622,12 @@ impl Node {
                     if let Some(parent) = target.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    self.dl.blobs().export(hash, &target).await?;
+                    // Перенос из хранилища (на том же диске) вместо копии: место не занимается дважды.
+                    // На другом диске iroh-blobs сам копирует.
+                    self.dl
+                        .blobs()
+                        .export_with_opts(ExportOptions { hash, mode: ExportMode::TryReference, target: target.clone() })
+                        .await?;
                 }
                 Ok(())
             }
@@ -608,8 +660,26 @@ fn remove_any(p: &Path) {
     let _ = std::fs::remove_file(p);
 }
 
+/// Адрес для ссылки: ID узла и relay, без IP-адресов — ссылку пересылают кому угодно, а IP раздающего
+/// не должен уходить вместе с ней. Прямое соединение iroh всё равно наладит через relay.
+/// Без relay (нет интернета) остаётся только полный адрес, иначе по ссылке не найти.
+fn public_addr(addr: &iroh::EndpointAddr) -> iroh::EndpointAddr {
+    let relays: Vec<_> = addr.addrs.iter().filter(|a| a.is_relay()).cloned().collect();
+    if relays.is_empty() {
+        addr.clone()
+    } else {
+        iroh::EndpointAddr::from_parts(addr.id, relays)
+    }
+}
+
+/// https-ссылка на страницу-прокладку: тикет после «#» — браузер не отправляет его на сервер.
+pub fn web_link(link: &str) -> Option<String> {
+    let base = option_env!("TIKDL_LINK_BASE").filter(|b| !b.is_empty())?;
+    Some(format!("{base}#{}", link.strip_prefix(SCHEME).unwrap_or(link)))
+}
+
 fn make_link(addr: &iroh::EndpointAddr, root: Hash, total: u64, name: &str) -> String {
-    let ticket = BlobTicket::new(addr.clone(), root, BlobFormat::HashSeq);
+    let ticket = BlobTicket::new(public_addr(addr), root, BlobFormat::HashSeq);
     format!("{SCHEME}{ticket}?size={total}&name={}", urlencoding::encode(name))
 }
 
@@ -627,6 +697,57 @@ fn load_shares(dir: &Path) -> Vec<ShareRecord> {
 fn save_shares(dir: &Path, shares: &[ShareRecord]) -> Result<()> {
     let json = serde_json::to_vec_pretty(shares)?;
     paths::write_private(&dir.join(SHARES_FILE), &json).context("не удалось сохранить список раздач")
+}
+
+/// Состав раздачи, узнанный у раздающего.
+#[derive(Serialize, Clone)]
+pub struct Peek {
+    pub total: u64,
+    pub name: Option<String>,
+    pub files: Vec<(String, u64)>,
+}
+
+/// Свободное место на диске, где лежит (или будет лежать) путь.
+pub fn free_space(p: &Path) -> Option<u64> {
+    fs4::available_space(existing_ancestor(p)).ok()
+}
+
+fn human(n: u64) -> String {
+    let units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+    let (mut v, mut i) = (n as f64, 0);
+    while v >= 1024.0 && i < 4 {
+        v /= 1024.0;
+        i += 1;
+    }
+    if i == 0 { format!("{n} Б") } else { format!("{v:.1} {}", units[i]) }
+}
+
+/// Папка назначения может ещё не существовать — место считаем по ближайшей существующей.
+fn existing_ancestor(p: &Path) -> PathBuf {
+    let mut cur = p.to_path_buf();
+    while !cur.exists() {
+        match cur.parent() {
+            Some(parent) => cur = parent.to_path_buf(),
+            None => break,
+        }
+    }
+    cur
+}
+
+fn same_volume(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (std::fs::metadata(a), std::fs::metadata(b)) {
+            (Ok(x), Ok(y)) => x.dev() == y.dev(),
+            _ => false,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let root = |p: &Path| p.components().next().map(|c| c.as_os_str().to_ascii_lowercase());
+        root(a) == root(b)
+    }
 }
 
 /// Разбор ссылки tikdl://get/<тикет>?size=..&name=.. или «голого» тикета (в т.ч. от sendme).

@@ -7,9 +7,10 @@ const downloads = [
   { id: 'a2', link: 'tikdl://get/a2', dest: '/Users/me/Downloads', name: 'Проект.zip', state: 'done', bytes: 30 * MB, total: 30 * MB, message: '/Users/me/Downloads/Проект.zip' },
 ];
 let shares = [
-  { root: 'r1', name: 'Фото', source: '/Users/me/Pictures/Фото', link: 'tikdl://get/blobacahq3x2demo', files: 12, skipped: 2, total: 640 * MB, state: 'active' },
+  { root: 'r1', name: 'Фото', source: '/Users/me/Pictures/Фото', link: 'tikdl://get/blobacahq3x2demo', files: 12, skipped: 2, total: 640 * MB, state: 'active', web_link: 'https://example.github.io/tikdl/get/#blobacahq3x2demo' },
 ];
 const handlers = {
+  peek_link: () => ({ total: 62 * MB, name: 'Новая папка', files: [['Новая папка/a.jpg', 40 * MB], ['Новая папка/b.mov', 22 * MB]], free: 120 * 1024 * MB, space_error: null }),
   inspect_link: ({ link }) => link.startsWith('tikdl://') ? { id: 'n' + link.length, name: 'Новая папка', size: 62 * MB, from: 'k7p2demonodeid' } : Promise.reject('это не ссылка TikDL'),
   default_download_dir: () => '/Users/me/Downloads',
   take_pending_links: () => [],
@@ -34,4 +35,5 @@ export const mock = {
   listen: async (ev, cb) => { (subs[ev] ||= []).push(cb); return () => {}; },
   pick: async () => null,
   reveal: async () => null,
+  onDragDrop: async () => () => {},
 };

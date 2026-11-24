@@ -73,8 +73,20 @@ body { margin: 0; font: var(--f-13)/1.45 var(--font); background: var(--c-bg); c
 .tk-field:focus { outline: none; border-color: var(--c-acc); }
 .tk-field[readonly] { color: var(--c-dim); }
 
+/* FileList */
+.tk-files { list-style: none; margin: 0; padding: var(--s-2) 0; display: flex; flex-direction: column; gap: var(--s-1); border-top: var(--line-w) solid var(--c-line); }
+.tk-files__row { display: flex; gap: var(--s-4); min-width: 0; }
+.tk-files__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-files__size { flex: none; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.tk-files__more { color: var(--c-dim); }
+
+/* DropOverlay */
+.tk-drop { position: fixed; inset: 0; z-index: var(--z-dialog); display: flex; align-items: center; justify-content: center; padding: var(--s-8); background: color-mix(in srgb, var(--c-bg) 85%, transparent); }
+.tk-drop__box { flex: 1; align-self: stretch; display: flex; flex-direction: column; gap: var(--s-4); align-items: center; justify-content: center; border: var(--line-w) dashed var(--c-acc); border-radius: var(--r-2); color: var(--c-acc); }
+
 /* Showcase */
 .tk-show__h { font-size: var(--f-15); margin: var(--s-6) 0 0; font-weight: 600; }
+.tk-show__inline { position: static; height: calc(var(--h-link) * 2); }
 .tk-show__label { color: var(--c-dim); font-size: var(--f-11); }
 
 /* Last on purpose: hiding wins over any layout class of the same weight. */

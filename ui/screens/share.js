@@ -24,9 +24,9 @@ export function ShareScreen() {
   const status = Text('', 'bad');
   const empty = Text('Пока ничего не раздаётся', 'empty');
   const pick = Panel({},
-    Line(Button({ text: 'Раздать файл…', variant: 'primary', wide: true, id: 'shFile', onClick: () => st.share(false) }),
+    Line(Button({ text: 'Раздать файлы…', variant: 'primary', wide: true, id: 'shFile', onClick: () => st.share(false) }),
       Button({ text: 'Раздать папку…', variant: 'primary', wide: true, id: 'shDir', onClick: () => st.share(true) })),
-    Text('Пока приложение открыто, их можно скачать по ссылке.', 'dim'), status);
+    Text('Или перетащите файлы и папки в окно. Окно можно закрыть: TikDL останется в строке меню и продолжит раздавать.', 'dim'), status);
   const list = RowList();
   st.on('shares', () => {
     const s = st.get();

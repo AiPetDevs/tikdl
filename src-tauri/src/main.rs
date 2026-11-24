@@ -142,6 +142,69 @@ fn inspect_link(link: String) -> Result<LinkInfo, String> {
     })
 }
 
+/// Что внутри раздачи — по явной просьбе пользователя («Что внутри?»): только тогда узел подключается
+/// к отправителю до решения скачивать.
+#[derive(Serialize)]
+struct PeekInfo {
+    total: u64,
+    name: Option<String>,
+    files: Vec<(String, u64)>,
+    free: Option<u64>,
+    /// Почему не хватит места; None — хватает.
+    space_error: Option<String>,
+}
+
+#[tauri::command]
+async fn peek_link(state: State<'_, AppState>, link: String, dest: String) -> Result<PeekInfo, String> {
+    let l = core::parse_link(&link).map_err(|e| e.to_string())?;
+    let node = state.node().await?;
+    let p = node.peek(&l.ticket).await.map_err(|e| format!("{e:#}"))?;
+    let dest = PathBuf::from(dest);
+    let space_error = node.check_space(l.ticket.hash(), p.total, &dest).await.err().map(|e| format!("{e:#}"));
+    Ok(PeekInfo { total: p.total, name: p.name, files: p.files, free: core::free_space(&dest), space_error })
+}
+
+/// Системное уведомление о готовой загрузке (видно, даже когда окно закрыто и TikDL в строке меню).
+fn notify_done(app: &AppHandle, path: Option<&str>) {
+    use tauri_plugin_notification::NotificationExt;
+    let name = path
+        .and_then(|p| Path::new(p).file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let _ = app.notification().builder().title("Готово").body(format!("Скачано: {name}")).show();
+}
+
+/// Показать окно (оно могло быть скрыто: закрытое окно не завершает приложение, раздачи идут).
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// Значок в строке меню: окно можно закрыть, раздачи продолжаются; «Выйти» — настоящий выход.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+    let open = MenuItem::with_id(app, "open", "Открыть TikDL", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Выйти из TikDL", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .icon_as_template(true)
+        .tooltip("TikDL — раздачи работают, пока приложение запущено")
+        .menu(&menu)
+        .on_menu_event(|app, ev| match ev.id().as_ref() {
+            "open" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn default_download_dir() -> String {
     dirs::download_dir()
@@ -238,10 +301,11 @@ async fn spawn_job(
         });
         // Ссылка без размера (голый тикет): узнаём размер и имя у раздающего, иначе полоса стоит на месте.
         if total.is_none() {
-            if let Ok((size, name)) = node.probe(&l.ticket).await {
-                total = Some(size);
+            if let Ok(peek) = node.peek(&l.ticket).await {
+                total = Some(peek.total);
+                let name = peek.name.clone();
                 st.update(&id2, |r| {
-                    r.total = Some(size);
+                    r.total = Some(peek.total);
                     if r.name.is_none() {
                         r.name = name.clone();
                     }
@@ -258,10 +322,17 @@ async fn spawn_job(
                 });
             }
         }
+        // Места не хватит — отказ до первого байта, а не забитый диск посреди загрузки.
+        let space = match total {
+            Some(t) => node.check_space(l.ticket.hash(), t, &dest).await,
+            None => Ok(()),
+        };
         let mut speed = Speed::new();
         let mut last_emit = Instant::now() - Duration::from_secs(1);
         let mut last_bytes = 0u64;
-        let res = node
+        let res = match space {
+            Err(e) => Err(e),
+            Ok(()) => node
             .download(&l.ticket, &dest, cancel_rx, |bytes| {
                 last_bytes = bytes;
                 let s = speed.push(bytes);
@@ -279,7 +350,8 @@ async fn spawn_job(
                     name: None,
                 });
             })
-            .await;
+            .await,
+        };
         // Состояние решает сама задача — «пауза» не может прийти после «готово».
         let (state_name, message, bytes) = match &res {
             Ok(path) => ("done", Some(path.to_string_lossy().to_string()), total.unwrap_or(last_bytes).max(last_bytes)),
@@ -292,6 +364,9 @@ async fn spawn_job(
             r.bytes = bytes;
         })
         .await;
+        if state_name == "done" {
+            notify_done(&app2, message.as_deref());
+        }
         emit(Progress {
             id: id2.clone(),
             bytes,
@@ -383,6 +458,9 @@ fn print_share(s: &core::Shared) {
         "{}\n  {} · файлов: {}, пропущено скрытых: {} · {}\n  {}\n",
         s.source, s.root, s.files, s.skipped, state, s.link
     );
+    if let Some(w) = &s.web_link {
+        println!("  для мессенджеров: {w}\n");
+    }
 }
 
 /// Режим без окна для сервера.
@@ -452,13 +530,8 @@ fn main() {
 
     tauri::Builder::default()
         // Должен быть первым: второй запуск (клик по ссылке) передаёт ссылку в уже открытое окно (аудит P1-7).
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| show_main(app)))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -468,6 +541,7 @@ fn main() {
         })
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
+            build_tray(app)?;
             #[cfg(any(target_os = "linux", windows))]
             let _ = app.deep_link().register_all();
 
@@ -480,9 +554,7 @@ fn main() {
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |ev| {
                 queue(&handle, ev.urls().iter().map(|u| u.to_string()).collect());
-                if let Some(w) = handle.get_webview_window("main") {
-                    let _ = w.set_focus();
-                }
+                show_main(&handle);
             });
             // Ссылка, с которой приложение было запущено: ждёт, пока страница её заберёт.
             if let Ok(Some(urls)) = app.deep_link().get_current() {
@@ -515,8 +587,16 @@ fn main() {
             });
             Ok(())
         })
+        // Закрыть окно = спрятать: узел продолжает раздавать, приложение живёт в строке меню.
+        .on_window_event(|w, ev| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = ev {
+                api.prevent_close();
+                let _ = w.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             inspect_link,
+            peek_link,
             default_download_dir,
             take_pending_links,
             list_downloads,
@@ -531,10 +611,16 @@ fn main() {
         .expect("ошибка запуска приложения")
         .run(|app, ev| {
             // Записать базы хранилищ перед выходом, иначе теряется последняя пачка изменений.
-            if let tauri::RunEvent::Exit = ev {
-                if let Some(node) = app.state::<AppState>().node.get().cloned() {
-                    tauri::async_runtime::block_on(node.shutdown());
+            match ev {
+                tauri::RunEvent::Exit => {
+                    if let Some(node) = app.state::<AppState>().node.get().cloned() {
+                        tauri::async_runtime::block_on(node.shutdown());
+                    }
                 }
+                // macOS: щелчок по значку в Dock возвращает спрятанное окно.
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => show_main(app),
+                _ => {}
             }
         });
 }

@@ -12,9 +12,11 @@
 | StatusChip | `kit/StatusChip.js` | состояние одним словом справа от имени | tone dim/warn/ok/bad, hint |
 | ProgressPill, LinkPill | `kit/ProgressPill.js` | капсула с данными внутри; неизвестное — «—», не 0 % | tone idle/run/done/fail; LinkPill: value + note |
 | TransferRow, RowList | `kit/TransferRow.js` | строка передачи: имя + ярлык; капсула + значки на одной строке; список с линиями 1 px | kind down/up, chip, body, actions |
+| FileList | `kit/FileList.js` | состав передачи: имя слева, размер справа; «и ещё N» | files [{name,size}], more |
+| DropOverlay | `kit/DropOverlay.js` | подсказка поверх окна, пока над ним тащат файлы | text; set(on) |
 | Tabs | `kit/Tabs.js` | переключатель разделов | items, value, onChange |
 | TextField, TextArea, PathField | `kit/Field.js` | поля ввода; путь только для чтения с выбором папки | readonly, placeholder |
-| Page, Stack, Line, Panel, Text | `kit/Layout.js` | раскладка и текст | Panel accent; Text dim/bad/strong/empty |
+| Page, Stack, Line, Panel, Text, retone | `kit/Layout.js` | раскладка и текст | Panel accent; Text dim/bad/strong/empty |
 | Showcase | `kit/showcase.js` | витрина всех компонентов во всех состояниях | `#/kit` |
 
 Экраны: `screens/get.js` (GetScreen: подтверждение входящей ссылки, форма, загрузки), `screens/share.js` (ShareScreen: выбор, раздачи).

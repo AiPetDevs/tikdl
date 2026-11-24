@@ -3,6 +3,7 @@
 import { h, show } from './kit/dom.js';
 import { Page, Text } from './kit/Layout.js';
 import { Tabs } from './kit/Tabs.js';
+import { DropOverlay } from './kit/DropOverlay.js';
 
 if (location.hash === '#/kit') {
   const { Showcase } = await import('./kit/showcase.js');
@@ -16,8 +17,11 @@ if (location.hash === '#/kit') {
   const select = id => { for (const [k, el] of Object.entries(screens)) show(el, k === id); if (id === 'share') st.refreshShares(); };
   const tabs = Tabs({ items: [{ id: 'get', text: 'Скачать' }, { id: 'share', text: 'Раздать' }], value: 'get', onChange: select });
   st.on('confirm', c => { if (c) { tabs.select('get'); select('get'); } });
+  const drop = DropOverlay({ text: 'Отпустите — начнём раздавать' });
+  st.on('drag', on => drop.set(on));
+  st.on('goto', id => { tabs.select(id); select(id); });
   st.on('net', () => { net.textContent = st.get().netError; show(net, !!st.get().netError); });
   select('get');
-  document.body.append(Page(net, tabs.el, h('div', {}, screens.get, screens.share)));
+  document.body.append(Page(net, tabs.el, h('div', {}, screens.get, screens.share)), drop.el);
   await st.boot();
 }

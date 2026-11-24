@@ -8,7 +8,9 @@ import { ProgressPill, LinkPill } from './ProgressPill.js';
 import { TransferRow, RowList } from './TransferRow.js';
 import { Tabs } from './Tabs.js';
 import { TextArea, TextField, PathField } from './Field.js';
-import { downloadView, shareView, preparingView } from '../state.js';
+import { FileList } from './FileList.js';
+import { DropOverlay } from './DropOverlay.js';
+import { downloadView, shareView, preparingView, peekView } from '../state.js';
 
 const MB = 1024 * 1024;
 const section = (title, ...kids) => Stack(h('h2', { class: 'tk-show__h', text: title }), ...kids);
@@ -50,6 +52,10 @@ export function Showcase() {
     section('LinkPill', LinkPill({ value: 'tikdl://get/blobacahq3x2kq7demolinkvalue', note: '12 файлов · 640.0 МБ' })),
     section('TransferRow — загрузки (все состояния)', dl),
     section('TransferRow — раздачи', sh),
+    section('FileList — «Что внутри?»', FileList(peekView({ state: 'done', total: 70 * MB, free: 5 * 1024 * MB, space_error: null,
+      files: Array.from({ length: 10 }, (_, i) => [`Отпуск/IMG_${1000 + i}.jpg`, 7 * MB]) })).el,
+      Text(peekView({ state: 'done', total: 70 * MB, free: 20 * MB, space_error: 'не хватает места на диске (/Volumes/USB): нужно 134.0 МБ, свободно 20.0 МБ', files: [] }).status.text, 'bad')),
+    section('DropOverlay', label('поверх окна, пока над ним тащат файлы (здесь — в рамке)'), (() => { const d = DropOverlay({ text: 'Отпустите — начнём раздавать' }); d.set(true); d.el.classList.add('tk-show__inline'); return d.el; })()),
     section('Field', TextArea({ placeholder: 'Вставьте ссылку…' }), TextField({ value: 'обычное поле' }), PathField({ value: '/Users/me/Downloads' }).el),
     section('Panel / Text', Panel({}, Text('Обычный текст'), Text('Приглушённый', 'dim'), Text('Ошибка', 'bad')), Panel({ accent: true }, Text('Ждёт ответа', 'strong')), Text('Пока ничего не раздаётся', 'empty')),
   );

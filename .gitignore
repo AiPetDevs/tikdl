@@ -3,3 +3,4 @@ src-tauri/gen/schemas/
 node_modules/
 shots/
 .DS_Store
+ui/site/tokens.css

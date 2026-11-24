@@ -1,0 +1,10 @@
+/* Link landing page. Values only from tokens.css (copied from ui/ when the site is published). */
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--c-bg); color: var(--c-fg); font: var(--f-15)/1.5 var(--font); }
+.pg { max-width: var(--w-content); margin: 0 auto; padding: var(--s-10) var(--s-8); display: flex; flex-direction: column; gap: var(--s-6); }
+.pg__h { font-size: var(--f-15); margin: 0; }
+.pg__dim { color: var(--c-dim); margin: 0; }
+.pg__small { font-size: var(--f-11); }
+.pg__btn { display: inline-flex; align-items: center; justify-content: center; height: var(--h-control); padding: 0 var(--s-8); border-radius: var(--r-1); background: var(--c-acc); color: var(--c-on-acc); text-decoration: none; }
+.pg__link { color: var(--c-acc); }
+.pg__hidden { display: none; }

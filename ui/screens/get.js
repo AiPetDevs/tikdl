@@ -1,11 +1,12 @@
 // Screen "Скачать": incoming-link confirm, link form, list of downloads. Composition of the kit + state only.
 import { show } from '../kit/dom.js';
-import { Panel, Line, Text, Stack } from '../kit/Layout.js';
+import { Panel, Line, Text, Stack, retone } from '../kit/Layout.js';
 import { Button } from '../kit/Button.js';
 import { IconButton } from '../kit/IconButton.js';
 import { TextArea, PathField } from '../kit/Field.js';
 import { ProgressPill } from '../kit/ProgressPill.js';
 import { TransferRow, RowList } from '../kit/TransferRow.js';
+import { FileList } from '../kit/FileList.js';
 import * as st from '../state.js';
 
 const ACTIONS = {
@@ -18,17 +19,26 @@ const ACTIONS = {
 const buttons = (id, keys) => keys.map(k => IconButton({ ...ACTIONS[k], onClick: () => st.actions[k](id) }));
 
 export function GetScreen() {
-  // incoming link: waits for an explicit answer
+  // incoming link: waits for an explicit answer; "Что внутри?" asks the sender only on request
   const cfName = Text('', 'strong'), cfMeta = Text('', 'dim');
+  const peekStatus = Text('', 'dim'), peekFiles = FileList();
+  const peekBtn = Button({ text: 'Что внутри?', id: 'cfPeek', onClick: st.peekConfirm });
   const confirm = Panel({ accent: true, role: 'alertdialog', label: 'Подтверждение' },
-    Text('Пришла ссылка на скачивание. Скачать?', 'dim'), cfName, cfMeta,
+    Text('Пришла ссылка на скачивание. Скачать?', 'dim'), cfName, cfMeta, peekFiles.el, peekStatus,
     Line(Button({ text: 'Скачать', variant: 'primary', wide: true, id: 'cfYes', onClick: () => st.answerConfirm(true) }),
-      Button({ text: 'Отмена', id: 'cfNo', onClick: () => st.answerConfirm(false) })));
+      peekBtn, Button({ text: 'Отмена', id: 'cfNo', onClick: () => st.answerConfirm(false) })));
   show(confirm, false);
+  let shownLink = null;
   st.on('confirm', c => {
-    show(confirm, !!c); if (!c) return;
+    show(confirm, !!c); if (!c) { shownLink = null; return; }
     cfName.textContent = c.title; cfMeta.textContent = c.meta;
-    confirm.querySelector('#cfNo').focus();   // the link brings the window forward: a stray Return must not start a download
+    const pv = st.peekView(c.peek);
+    peekFiles.set(pv || { files: [] });
+    peekStatus.textContent = pv ? pv.status.text : '';
+    retone(peekStatus, pv?.status.tone === 'bad' ? 'bad' : 'dim');
+    show(peekStatus, !!pv); show(peekBtn, !c.peek || c.peek.state === 'error');
+    // the link brings the window forward: a stray Return must not start a download
+    if (shownLink !== c.link) { shownLink = c.link; confirm.querySelector('#cfNo').focus(); }
   });
 
   const link = TextArea({ placeholder: 'Вставьте ссылку или тикет, который вам прислали (tikdl://…)', id: 'link' });
