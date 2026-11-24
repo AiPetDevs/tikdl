@@ -120,3 +120,26 @@ Owner remarks R1, R2 (`docs/UI_REMARKS.md`). "Done" only after each line was run
 | W7 | .app | Close the window (red button) | App keeps running, icon in the menu bar; link still downloads; menu "Открыть" brings the window back, "Выйти" quits |
 | W8 | .app | Drag a file and a folder onto the window | Both get shared (rows appear on Раздать) |
 | W9 | .app | A download finishes | System notification "Готово: <name>" |
+
+## Weak points results (2026-11-23, rebuilt .app after the last edit; sender = CLI in a separate profile)
+
+| # | Result |
+|---|--------|
+| W1 | PASSED: git repository, 4 commits (state before, scenarios, the batch, reflink fix) |
+| W2 | PASSED: dest on a 150 MB disk image, 400 MB file → «не хватает места на диске (/Volumes/TikSmall): нужно 464.0 МБ, свободно 148.6 МБ», nothing written to the image |
+| W3 | PASSED (changed approach): free space used 411 MB for a 400 MB file (APFS clone, not a 2nd copy); internal store 411 744 KB → 72 KB 15 s later; file identical; a second download after deleting the file works. Hand-over (move) was tried first and FAILED: the store kept a pointer to the moved file, the next download of the same data broke («Error::Io») — replaced by clone-copy |
+| W4 | PASSED: copied link holds node id + relay URL only, no IP; a fresh receiver downloaded through it |
+| W5 | PARTIAL: app copies the https link when built with `TIKDL_LINK_BASE`; the landing page (Playwright) turns `#…` into `tikdl://get/…` and shows «Скачайте TikDL». NOT checked: published on GitHub Pages (needs the repo on GitHub + Pages enabled), a click from a real messenger |
+| W6 | PASSED: «Что внутри?» showed files with sizes, real total and free space; nothing downloaded |
+| W7 | NOT checked: the screen was locked (macOS blocks window actions); code: close → hide, tray menu «Открыть TikDL» / «Выйти из TikDL», Dock click reopens |
+| W8 | NOT checked: needs a real drag from Finder with the screen unlocked; mock UI handles the drop event (rows appear) |
+| W9 | NOT checked by eye: no error in the log; first notification may need «Разрешить» in System Settings → Notifications |
+| — | NOT checked: Windows/Linux (no clone there → space check asks for 2× during hand-over) |
+
+## 2026-11-23 23:41 · Слабые места: место, копия, строка меню, ссылка без IP, прокладка, перетаскивание, уведомление, состав, git
+- written: 2026-11-23T23:41:48-05:00
+- where: собранное TikDL.app + CLI-раздающий в отдельном профиле
+- data: файл 400 МБ, образ диска 150 МБ, ссылка без размера
+- expect: отказ при нехватке места до записи; одна копия на APFS; ссылка без IP; «Что внутри?» со списком; git с коммитами; окно закрывается в строку меню, перетаскивание и уведомление работают
+- run: 2026-11-23T23:41:48-05:00 · result: fail · evidence: <project>/docs/plans/evidence/weak_points_checks.txt (mtime 2026-11-23T23:41:48-05:00) · note: W1–W4, W6 прошли; W5 частично (нет GitHub Pages); W7–W9 не проверены: экран заблокирован
+- run: 2026-11-23T23:41:57-05:00 · result: fail · evidence: <project>/docs/plans/evidence/weak_points_checks.txt (mtime 2026-11-23T23:41:57-05:00) · note: W1–W4, W6 прошли; ворота чистые; W5 частично (нет GitHub Pages); W7–W9 не проверены: экран заблокирован
