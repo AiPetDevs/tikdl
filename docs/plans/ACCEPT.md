@@ -104,3 +104,19 @@ Owner remarks R1, R2 (`docs/UI_REMARKS.md`). "Done" only after each line was run
 - data: текущий код и аудит TikDL на 23.11.2026
 - expect: страница открывается без интернета, слабые места разложены по степени вреда, есть порядок работ
 - run: 2026-11-23T23:16:16-05:00 · result: ok · evidence: <project>/docs/plans/evidence/weak_points_page.png (mtime 2026-11-23T23:16:16-05:00) · note: страница отрисована в Chromium, снимок во всю высоту
+
+# Acceptance — weak points batch (owner asks A5–A10, 2026-11-23)
+
+"Done" only after each line was run on the rebuilt .app after the last edit.
+
+| # | Where | Action | Expected |
+|---|-------|--------|----------|
+| W1 | `git log` | — | Repository exists, every step below is a commit |
+| W2 | .app, dest folder on a small disk image (e.g. 200 MB) | Download 400 MB | Refused before any data: "не хватает места: нужно …, свободно …"; nothing written |
+| W3 | .app, download 400 MB on the same disk | Watch free space during and after | Peak use ≈ 1× size (not 2×): the store hands files over instead of copying |
+| W4 | .app, Раздать | Copy a link | Link holds no IP addresses (only node id + relay); a fresh receiver still downloads |
+| W5 | Messenger-friendly link | Copy link | An https link is offered; opening it in a browser opens TikDL with the confirm card |
+| W6 | .app, incoming link | "Что внутри?" on the confirm card | List of files with sizes, real total, free space on the target disk; nothing downloaded |
+| W7 | .app | Close the window (red button) | App keeps running, icon in the menu bar; link still downloads; menu "Открыть" brings the window back, "Выйти" quits |
+| W8 | .app | Drag a file and a folder onto the window | Both get shared (rows appear on Раздать) |
+| W9 | .app | A download finishes | System notification "Готово: <name>" |
