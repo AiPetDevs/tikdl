@@ -1,0 +1,23 @@
+{
+ "roots": [
+  "ui"
+ ],
+ "notUi": [
+  {
+   "path": "docs",
+   "why": "mockups, documents and tests are not product code"
+  }
+ ],
+ "tokenFiles": [
+  "ui/tokens.css"
+ ],
+ "componentDirs": [
+  "ui/kit"
+ ],
+ "registry": "docs/UI_COMPONENTS.md",
+ "smoke": [
+  "http://127.0.0.1:8765/index.html",
+  "http://127.0.0.1:8765/index.html#/kit"
+ ],
+ "smokeReady": ".tk-tabs, .tk-show__h"
+}

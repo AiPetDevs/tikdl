@@ -1,0 +1,48 @@
+/* Tokens: the only place with literal colours and sizes. Palette — TransferBar (docs/reference/TransferBar). */
+:root {
+  color-scheme: light dark;   /* follows the system; light-dark(light, dark) below */
+  --c-bg: light-dark(rgb(246 246 248), rgb(30 31 34));
+  --c-surface: light-dark(rgb(255 255 255), rgb(37 38 42));
+  --c-field: light-dark(rgb(232 233 237), rgb(42 44 48));
+  --c-fill: light-dark(rgb(196 202 212), rgb(82 92 107));
+  --c-fill-run: light-dark(rgb(138 172 222), rgb(58 101 158));
+  --c-fill-done: light-dark(rgb(150 205 168), rgb(55 113 77));
+  --c-fill-fail: light-dark(rgb(230 160 160), rgb(154 75 75));
+  --c-fg: light-dark(rgb(29 31 36), rgb(230 231 234));
+  --c-dim: light-dark(rgb(110 114 124), rgb(140 143 152));
+  --c-line: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 7%));
+  --c-line2: light-dark(rgb(0 0 0 / 10%), rgb(255 255 255 / 12%));
+  --c-acc: light-dark(rgb(47 109 214), rgb(122 162 220));
+  --c-ok: light-dark(rgb(38 138 72), rgb(115 191 140));
+  --c-warn: light-dark(rgb(176 120 20), rgb(217 176 90));
+  --c-bad: light-dark(rgb(196 60 60), rgb(224 122 122));
+  --c-on-bad: light-dark(rgb(255 255 255), rgb(0 0 0));
+  --c-on-acc: light-dark(rgb(255 255 255), rgb(16 20 28));
+
+  --f-11: 11px;
+  --f-13: 13px;
+  --f-15: 15px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  --s-1: 2px;
+  --s-2: 4px;
+  --s-3: 6px;
+  --s-4: 8px;
+  --s-5: 10px;
+  --s-6: 12px;
+  --s-8: 16px;
+  --s-10: 20px;
+
+  --h-pill: 22px;
+  --h-control: 30px;
+  --icon: 16px;
+  --icon-btn: 24px;
+  --r-1: 5px;
+  --r-2: 8px;
+  --r-pill: 999px;
+  --w-content: 560px;
+  --h-link: 64px;
+  --line-w: 1px;
+  --z-dialog: 10;
+}

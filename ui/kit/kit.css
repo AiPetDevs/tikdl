@@ -1,0 +1,81 @@
+/* UI kit styles. Namespace: tk-. Values only from tokens.css. Registry: docs/UI_COMPONENTS.md */
+* { box-sizing: border-box; }
+body { margin: 0; font: var(--f-13)/1.45 var(--font); background: var(--c-bg); color: var(--c-fg); }
+
+/* Page / Stack / Panel */
+.tk-page { max-width: var(--w-content); margin: 0 auto; padding: var(--s-6) var(--s-8) var(--s-10); }
+.tk-stack { display: flex; flex-direction: column; gap: var(--s-6); }
+.tk-line { display: flex; gap: var(--s-4); align-items: center; }
+.tk-grow { flex: 1; min-width: 0; }
+.tk-panel { background: var(--c-surface); border: var(--line-w) solid var(--c-line); border-radius: var(--r-2); padding: var(--s-6); display: flex; flex-direction: column; gap: var(--s-4); }
+.tk-panel--accent { border-color: var(--c-acc); }
+
+/* Text */
+.tk-text--dim { color: var(--c-dim); }
+.tk-text--bad { color: var(--c-bad); }
+.tk-text--strong { font-weight: 600; word-break: break-all; }
+.tk-text--center { text-align: center; padding: var(--s-8) 0; }
+
+/* Button */
+.tk-btn { height: var(--h-control); padding: 0 var(--s-6); border-radius: var(--r-1); border: var(--line-w) solid var(--c-line2); background: transparent; color: var(--c-fg); font: inherit; cursor: pointer; white-space: nowrap; }
+.tk-btn:hover { background: var(--c-line2); }
+.tk-btn--primary { background: var(--c-acc); border-color: var(--c-acc); color: var(--c-on-acc); }
+.tk-btn--primary:hover { background: var(--c-acc); filter: brightness(1.08); }
+.tk-btn:disabled { opacity: .5; cursor: default; }
+.tk-btn:focus-visible, .tk-icon-btn:focus-visible, .tk-tab:focus-visible { outline: var(--line-w) solid var(--c-acc); outline-offset: var(--s-1); }
+
+/* IconButton */
+.tk-icon-btn { width: var(--icon-btn); height: var(--icon-btn); flex: none; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--r-1); background: transparent; color: var(--c-dim); cursor: pointer; }
+.tk-icon-btn:hover { background: var(--c-line2); color: var(--c-fg); }
+.tk-icon-btn--armed, .tk-icon-btn--armed:hover { background: var(--c-bad); color: var(--c-on-bad); }
+.tk-icon { width: var(--icon); height: var(--icon); display: block; }
+.tk-icon--small { width: calc(var(--icon) - var(--s-1)); height: calc(var(--icon) - var(--s-1)); }
+
+/* StatusChip */
+.tk-chip { flex: none; font-size: var(--f-11); line-height: 1.4; padding: 0 var(--s-3); border-radius: var(--r-pill); border: var(--line-w) solid; white-space: nowrap; }
+.tk-chip--dim { color: var(--c-dim); border-color: color-mix(in srgb, var(--c-dim) 50%, transparent); }
+.tk-chip--warn { color: var(--c-warn); border-color: color-mix(in srgb, var(--c-warn) 50%, transparent); }
+.tk-chip--ok { color: var(--c-ok); border-color: color-mix(in srgb, var(--c-ok) 50%, transparent); }
+.tk-chip--bad { color: var(--c-bad); border-color: color-mix(in srgb, var(--c-bad) 50%, transparent); }
+
+/* ProgressPill / LinkPill: a capsule with its data inside */
+.tk-pill { position: relative; min-width: 0; height: var(--h-pill); border-radius: var(--r-pill); background: var(--c-field); overflow: hidden; }
+.tk-pill__fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: var(--r-pill); background: var(--c-fill); }
+.tk-pill--run .tk-pill__fill { background: var(--c-fill-run); }
+.tk-pill--done .tk-pill__fill { background: var(--c-fill-done); }
+.tk-pill--fail .tk-pill__fill { background: var(--c-fill-fail); }
+.tk-pill__text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--s-4); padding: 0 var(--s-5); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; color: var(--c-fg); }
+.tk-pill__lead { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--f-11); color: var(--c-dim); user-select: all; }
+.tk-pill__main { overflow: hidden; text-overflow: ellipsis; }
+
+/* TransferRow: name + state, then the pill and its actions on one line */
+.tk-list { display: flex; flex-direction: column; background: var(--c-surface); border: var(--line-w) solid var(--c-line); border-radius: var(--r-2); }
+.tk-list:empty { display: none; }
+.tk-row { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-6); }
+.tk-row + .tk-row { border-top: var(--line-w) solid var(--c-line); }
+.tk-row__head { display: flex; align-items: center; gap: var(--s-4); min-width: 0; }
+.tk-row__kind { color: var(--c-dim); flex: none; }
+.tk-row__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-row__body { display: flex; align-items: center; gap: var(--s-2); }
+.tk-row__body > .tk-pill { flex: 1; }
+.tk-row__actions { display: flex; gap: var(--s-1); flex: none; }
+.tk-row__actions:empty { display: none; }
+
+/* Tabs (segmented) */
+.tk-tabs { display: flex; padding: var(--s-1); gap: var(--s-1); background: var(--c-field); border-radius: var(--r-2); }
+.tk-tab { flex: 1; height: calc(var(--h-control) - var(--s-2)); border: 0; border-radius: var(--r-1); background: transparent; color: var(--c-dim); font: inherit; cursor: pointer; }
+.tk-tab:hover { color: var(--c-fg); }
+.tk-tab[aria-selected="true"] { background: var(--c-surface); color: var(--c-fg); }
+
+/* Fields */
+.tk-field { width: 100%; min-width: 0; height: var(--h-control); padding: 0 var(--s-4); border: var(--line-w) solid var(--c-line2); border-radius: var(--r-1); background: transparent; color: var(--c-fg); font: inherit; }
+.tk-field--area { height: var(--h-link); padding: var(--s-3) var(--s-4); resize: vertical; font-family: var(--font-mono); font-size: var(--f-11); }
+.tk-field:focus { outline: none; border-color: var(--c-acc); }
+.tk-field[readonly] { color: var(--c-dim); }
+
+/* Showcase */
+.tk-show__h { font-size: var(--f-15); margin: var(--s-6) 0 0; font-weight: 600; }
+.tk-show__label { color: var(--c-dim); font-size: var(--f-11); }
+
+/* Last on purpose: hiding wins over any layout class of the same weight. */
+.tk-hidden { display: none; }

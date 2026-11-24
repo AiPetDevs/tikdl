@@ -1,0 +1,15 @@
+{
+  "name": "tikdl-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/ui_check.mjs && eslint ui && node scripts/ui_smoke.mjs && cd src-tauri && cargo test",
+    "ui:check": "node scripts/ui_check.mjs",
+    "ui:smoke": "node scripts/ui_smoke.mjs",
+    "lint": "eslint ui"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "playwright": "^1.65.1"
+  }
+}
