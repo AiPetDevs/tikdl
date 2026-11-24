@@ -27,7 +27,6 @@ use iroh_blobs::{
         blobs::{AddPathOptions, ImportMode},
         downloader::{DownloadProgressItem, Shuffled},
     },
-    api::blobs::{ExportMode, ExportOptions},
     format::collection::Collection,
     protocol::{ChunkRanges, ChunkRangesSeq, GetRequest},
     hashseq::HashSeq,
@@ -185,11 +184,12 @@ async fn bind_endpoint(key: SecretKey, port: u16) -> Result<Endpoint> {
 }
 
 fn gc_interval() -> Duration {
-    // TIKDL_GC_SECS — для проверок; по умолчанию раз в 5 минут.
+    // TIKDL_GC_SECS — для проверок. По умолчанию раз в 15 с: внутренняя копия скачанного освобождается
+    // почти сразу после выкладки в папку (там, где файловая система не умеет клонировать, она занимает место).
     let secs = std::env::var("TIKDL_GC_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(300u64);
+        .unwrap_or(15u64);
     Duration::from_secs(secs.max(1))
 }
 
@@ -505,7 +505,6 @@ impl Node {
     }
 
     /// Хватит ли места: в хранилище загрузок — на недокачанное, в папке назначения — на всё.
-    /// На одном диске файлы переносятся из хранилища без копии, поэтому нужно один раз.
     pub async fn check_space(&self, root: Hash, total: u64, dest: &Path) -> Result<()> {
         let local = self
             .dl
@@ -533,7 +532,10 @@ impl Node {
             Ok(())
         };
         if same_volume(store_dir, &dest_dir) {
-            check(&dest_dir, remaining + margin(total))
+            // Выкладка в папку — клон блоков там, где ФС это умеет (APFS на macOS); иначе на время
+            // выкладки нужна вторая копия (до чистки через ~15 с).
+            let export_extra = if cfg!(target_os = "macos") { 0 } else { total };
+            check(&dest_dir, remaining + export_extra + margin(total))
         } else {
             check(store_dir, remaining + margin(remaining))?;
             check(&dest_dir, total + margin(0))
@@ -622,12 +624,11 @@ impl Node {
                     if let Some(parent) = target.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    // Перенос из хранилища (на том же диске) вместо копии: место не занимается дважды.
-                    // На другом диске iroh-blobs сам копирует.
-                    self.dl
-                        .blobs()
-                        .export_with_opts(ExportOptions { hash, mode: ExportMode::TryReference, target: target.clone() })
-                        .await?;
+                    // Копия клонированием (reflink): на APFS, Btrfs, XFS, ReFS блоки общие — место не
+                    // удваивается. Перенос (TryReference) не годится: хранилище помнит файл по пути, а
+                    // пользователь его переименует или удалит — и повторная загрузка ломается.
+                    // Внутренняя копия освобождается чисткой через ~15 с после снятия тега.
+                    self.dl.blobs().export(hash, &target).await?;
                 }
                 Ok(())
             }

@@ -171,7 +171,9 @@ fn notify_done(app: &AppHandle, path: Option<&str>) {
         .and_then(|p| Path::new(p).file_name())
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    let _ = app.notification().builder().title("Готово").body(format!("Скачано: {name}")).show();
+    if let Err(e) = app.notification().builder().title("Готово").body(format!("Скачано: {name}")).show() {
+        eprintln!("уведомление не показано: {e}");
+    }
 }
 
 /// Показать окно (оно могло быть скрыто: закрытое окно не завершает приложение, раздачи идут).
