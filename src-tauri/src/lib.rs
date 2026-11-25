@@ -1,4 +1,6 @@
 
+#[cfg(target_os = "android")]
+mod android;
 mod core;
 mod once;
 mod paths;
@@ -235,7 +237,15 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 #[tauri::command]
-fn default_download_dir() -> String {
+fn default_download_dir(app: AppHandle) -> String {
+    #[cfg(target_os = "android")]
+    {
+        let _ = &app;
+        // Shared "Download" folder: apps may create files there without a permission since Android 11.
+        return "/storage/emulated/0/Download".into();
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
     dirs::download_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."))
@@ -518,11 +528,43 @@ struct ShareProgress {
 #[tauri::command]
 async fn share_path(app: AppHandle, state: State<'_, AppState>, path: String, once: bool) -> Result<core::Shared, String> {
     let node = state.node().await?;
-    node.share(&PathBuf::from(path), once, |done, total| {
-        let _ = app.emit("share-progress", ShareProgress { done, total });
-    })
-    .await
-    .map_err(|e| format!("{e:#}"))
+    #[cfg(target_os = "android")]
+    let path = if path.starts_with("content://") {
+        let imports = IMPORTS_DIR.get().cloned().ok_or("нет папки для выбранных файлов")?;
+        tokio::task::spawn_blocking(move || android::import_content(&path, &imports))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("{e:#}"))?
+            .to_string_lossy()
+            .to_string()
+    } else {
+        path
+    };
+    let r = node
+        .share(&PathBuf::from(path), once, |done, total| {
+            let _ = app.emit("share-progress", ShareProgress { done, total });
+        })
+        .await
+        .map_err(|e| format!("{e:#}"));
+    sync_service(&node).await;
+    r
+}
+
+/// Android: copies of files picked in the system picker (content:// URIs) live here while shared.
+#[cfg(target_os = "android")]
+static IMPORTS_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Android: keep the foreground service (and its notification) exactly while something is shared.
+async fn sync_service(node: &core::Node) {
+    #[cfg(target_os = "android")]
+    {
+        let active = !node.list_shares().await.is_empty();
+        if let Err(e) = android::set_sharing(active) {
+            eprintln!("служба раздачи: {e:#}");
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = node;
 }
 
 #[tauri::command]
@@ -532,7 +574,10 @@ async fn list_shares(state: State<'_, AppState>) -> Result<Vec<core::Shared>, St
 
 #[tauri::command]
 async fn stop_share(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    state.node().await?.stop_share(&id).await.map_err(|e| format!("{e:#}"))
+    let node = state.node().await?;
+    let r = node.stop_share(&id).await.map_err(|e| format!("{e:#}"));
+    sync_service(&node).await;
+    r
 }
 
 /// One-time share: a new link (the old one stops working, whoever holds it).
@@ -707,11 +752,15 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState {
-            downloads: Mutex::new(load_downloads()),
-            ..Default::default()
-        })
+        .manage(AppState::default())
         .setup(|app| {
+            #[cfg(mobile)]
+            if let Ok(d) = app.path().app_data_dir() {
+                let _ = core::DATA_DIR_OVERRIDE.set(d.join("tikdl"));
+                #[cfg(target_os = "android")]
+                let _ = IMPORTS_DIR.set(d.join("imports"));
+            }
+            *app.state::<AppState>().downloads.blocking_lock() = load_downloads();
             use tauri_plugin_deep_link::DeepLinkExt;
             #[cfg(desktop)]
             build_tray(app)?;
@@ -773,6 +822,9 @@ pub fn run() {
                             let _ = h2.emit("shares-changed", ());
                         }
                     });
+                }
+                if let Ok(node) = st.node().await {
+                    sync_service(&node).await;
                 }
                 let _ = h.emit("node-ready", ());
             });

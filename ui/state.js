@@ -1,6 +1,7 @@
 // state: data for the screens and everything derived from it. Screens read views from here and call actions;
 // they never call api directly and never compute.
-import { api } from './api.js';
+import { api, platform } from './api.js';
+export { platform };
 
 const subs = {};
 export const on = (topic, cb) => { (subs[topic] ||= []).push(cb); };
@@ -56,7 +57,7 @@ const BY_STATE = {
     pill: { fraction: c.fraction, text: c.amount || '—', tone: 'idle' }, actions: ['resume', 'remove'] }),
   error: (d, c) => ({ chip: { text: 'сбой', tone: 'bad', hint: d.message },
     pill: { fraction: c.fraction, text: d.message || 'ошибка', tone: 'fail', hint: d.message }, actions: ['resume', 'remove'] }),
-  done: d => ({ hint: d.message, chip: { text: 'готово', tone: 'ok' }, pill: { fraction: 1, text: bytes(d.total ?? d.bytes), tone: 'done' }, actions: ['reveal', 'forget'] }),
+  done: d => ({ hint: d.message, chip: { text: 'готово', tone: 'ok' }, pill: { fraction: 1, text: bytes(d.total ?? d.bytes), tone: 'done' }, actions: platform === 'android' ? ['forget'] : ['reveal', 'forget'] }),
   queued: () => ({ chip: { text: 'в очереди', tone: 'dim' }, pill: { fraction: null, text: '—', tone: 'idle' }, actions: ['remove'] }),
 };
 export function downloadView(d) {

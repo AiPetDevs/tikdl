@@ -56,12 +56,19 @@ None from this session (A5–A10, A13, A14 closed).
 - The CLI and the app share one data folder: do not run both on the same profile; use `HOME=<dir>` for the CLI.
 - Landing page navigates to `tikdl://`; in Playwright use `waitUntil: 'commit'`.
 
-## Android (2026-11-25, started)
+## Android (2026-11-25)
 - Code split: `src-tauri/src/lib.rs` (app, `run()` = mobile entry) + `main.rs` (desktop: CLI, then `run()`).
   Tray, single-instance, CLI, hide-on-close are `#[cfg(desktop)]`. Android project: `src-tauri/gen/android`.
+- `src-tauri/src/android.rs` (JNI): picked `content://` file → copied to app-private `imports/` and shared;
+  `ShareService.kt` foreground service runs exactly while shares exist (notification «TikDL раздаёт файлы»).
+  `MainActivity.kt`: Back = move to background (finishing the activity made Tauri exit the process).
+- Data dir = Tauri `app_data_dir()/tikdl`; downloads go to `/storage/emulated/0/Download`.
+- UI: `data-platform="android"` on <html>; `DesktopOnly()` hides folder pickers and Finder; status-bar padding.
 - Build: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME=~/Library/Android/sdk
   NDK_HOME=~/Library/Android/sdk/ndk/28.2.13676358 cargo tauri android build --apk --target aarch64 --debug`.
-- Verified: debug APK installs and opens on emulator `Medium_Phone_API_37.0` (`docs/plans/evidence/android_first_launch.png`).
-- Not done: download folder shows "." (no `dirs::download_dir` on Android); tabs under status bar (safe-area);
-  file picker returns `content://` URIs; background sharing needs a foreground service; `tikdl://` and https links;
-  no real transfer tested; APK 454 MB debug (release + strip needed).
+- Verified on emulator `Medium_Phone_API_37.0`: tikdl:// link opens confirm (`evidence/android_link_confirm.png`),
+  Mac→phone 30 MB sha1 match; phone→Mac via system picker 12 MB sha1 match (`evidence/android_sharing.png`),
+  also after Back (app in background); history restored after restart.
+- Not done: release APK (signing key, size; debug is 454 MB), folder sharing (Android picker gives files only),
+  imported copies use extra space and are not deleted on stop, https links open the landing page (scheme then
+  opens app), notification permission prompt on Android 13+ not asked explicitly, not tested on a real phone.

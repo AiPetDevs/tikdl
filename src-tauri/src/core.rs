@@ -161,7 +161,13 @@ pub struct Node {
     sweeper: tokio::task::JoinHandle<()>,
 }
 
+/// Set once at startup on platforms where `dirs` knows no data folder (Android: the app's private files dir).
+pub static DATA_DIR_OVERRIDE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
 pub fn data_dir() -> PathBuf {
+    if let Some(d) = DATA_DIR_OVERRIDE.get() {
+        return d.clone();
+    }
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("tikdl")

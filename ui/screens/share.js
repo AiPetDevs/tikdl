@@ -1,5 +1,5 @@
 // Screen "Раздать": pick a file or folder, list of shares (link and actions on the same line).
-import { show } from '../kit/dom.js';
+import { show, DesktopOnly } from '../kit/dom.js';
 import { Panel, Line, Text, Stack } from '../kit/Layout.js';
 import { Button } from '../kit/Button.js';
 import { Switch } from '../kit/Switch.js';
@@ -27,10 +27,12 @@ export function ShareScreen() {
   const empty = Text('Пока ничего не раздаётся', 'empty');
   const pick = Panel({},
     Line(Button({ text: 'Раздать файлы…', variant: 'primary', wide: true, id: 'shFile', onClick: () => st.share(false) }),
-      Button({ text: 'Раздать папку…', variant: 'primary', wide: true, id: 'shDir', onClick: () => st.share(true) })),
+      DesktopOnly(Button({ text: 'Раздать папку…', variant: 'primary', wide: true, id: 'shDir', onClick: () => st.share(true) }))),
     Switch({ label: 'Одноразовая ссылка', id: 'shOnce', onChange: st.setOnce,
       hint: 'Для одного устройства: скачать сможет только то, что откроет ссылку первым; после получения ссылка сгорает. В ссылке нет имени, размера и постоянного кода вашего компьютера' }).el,
-    Text('Или перетащите файлы и папки в окно. Окно можно закрыть: TikDL останется в строке меню и продолжит раздавать.', 'dim'), status);
+    Text(st.platform === 'android'
+      ? 'Пока что-то раздаётся, в шторке висит уведомление TikDL: приложение можно свернуть, ссылки работают.'
+      : 'Или перетащите файлы и папки в окно. Окно можно закрыть: TikDL останется в строке меню и продолжит раздавать.', 'dim'), status);
   const list = RowList();
   st.on('shares', () => {
     const s = st.get();

@@ -15,3 +15,5 @@ export function h(tag, props = {}, ...kids) {
 
 /** Show or hide with the kit's hidden class (never inline styles). */
 export function show(el, on) { el.classList.toggle('tk-hidden', !on); return el; }
+/** Mark a control that makes no sense on a phone (folder pickers, Finder): hidden on Android by kit.css. */
+export function DesktopOnly(el) { el.classList.add('desktop-only'); return el; }

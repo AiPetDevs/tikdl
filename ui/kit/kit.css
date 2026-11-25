@@ -1,6 +1,9 @@
 /* UI kit styles. Namespace: tk-. Values only from tokens.css. Registry: docs/UI_COMPONENTS.md */
 * { box-sizing: border-box; }
 body { margin: 0; font: var(--f-13)/1.45 var(--font); background: var(--c-bg); color: var(--c-fg); }
+/* Android: the page is drawn edge to edge, under the status bar; desktop-only controls are hidden. */
+[data-platform="android"] body { padding-top: max(env(safe-area-inset-top, 0px), calc(var(--s-10) + var(--s-4))); }
+[data-platform="android"] .desktop-only { display: none; }
 
 /* Page / Stack / Panel */
 .tk-page { max-width: var(--w-content); margin: 0 auto; padding: var(--s-6) var(--s-8) var(--s-10); }

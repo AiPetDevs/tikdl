@@ -6251,6 +6251,8 @@ dependencies = [
  "futures-lite",
  "iroh",
  "iroh-blobs",
+ "jni 0.21.1",
+ "ndk-context",
  "postcard",
  "serde",
  "serde_json",
