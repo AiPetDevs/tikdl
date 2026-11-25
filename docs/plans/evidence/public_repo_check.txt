@@ -1,0 +1,8 @@
+{"visibility":"PUBLIC"}
+  15 TikDL <tikdl@localhost>
+mac-username: 0
+disk-name: 0
+owner-email: 0
+gmail: 0
+workspace-path: 0
+host-name: 0

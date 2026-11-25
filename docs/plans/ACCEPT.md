@@ -179,3 +179,10 @@ Output: `../_RESULTS/TikDL_0.1.0_universal.dmg`.
 - data: 30 MB file shared from Mac CLI; 12 MB file picked in Android file picker
 - expect: tikdl:// link opens 'Скачать?'; file lands in Download with same sha1; phone share downloads on Mac with same sha1, also after Back
 - run: 2026-11-25T13:17:48-05:00 · result: ok · evidence: <project>/docs/plans/evidence/android_sharing.png (mtime 2026-11-25T13:17:09-05:00)
+
+## 2026-11-25 13:33 · Public repo has no owner data
+- written: 2026-11-25T13:33:21-05:00
+- where: github.com/AiPetDevs/tikdl, fresh clone
+- data: whole git history
+- expect: repo public; all authors TikDL; no Mac username, host, disk paths, email in any commit
+- run: 2026-11-25T13:33:21-05:00 · result: ok · evidence: <project>/docs/plans/evidence/public_repo_check.txt (mtime 2026-11-25T13:33:21-05:00)
