@@ -4,3 +4,6 @@ node_modules/
 shots/
 .DS_Store
 ui/site/tokens.css
+*.log
+*.tmp
+*.bak
