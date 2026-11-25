@@ -8,10 +8,11 @@ const PATHS = {
   copy: [['rect', { x: 5.5, y: 5.5, width: 7.5, height: 7.5, rx: 1.5, stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none' }], ['path', { d: 'M10.5 3.5V3A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5', stroke: 'currentColor', 'stroke-width': 1.4, fill: 'none' }]],
   check: [['path', { d: 'M3.5 8.5l3 3 6-7', stroke: 'currentColor', 'stroke-width': 1.7, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
   down: [['path', { d: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10', stroke: 'currentColor', 'stroke-width': 1.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  renew: [['path', { d: 'M12.5 6A5 5 0 1 0 13 9.5', stroke: 'currentColor', 'stroke-width': 1.5, fill: 'none', 'stroke-linecap': 'round' }], ['path', { d: 'M13 2.5V6H9.5', stroke: 'currentColor', 'stroke-width': 1.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
   up: [['path', { d: 'M8 11V3M4.5 6L8 2.5 11.5 6M3 13.5h10', stroke: 'currentColor', 'stroke-width': 1.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
 };
 
-/** Icon(name, small?) → <svg>. Names: pause play x reveal copy check down up. */
+/** Icon(name, small?) → <svg>. Names: pause play x reveal copy check down up renew. */
 export function Icon(name, small = false) {
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', '0 0 16 16');

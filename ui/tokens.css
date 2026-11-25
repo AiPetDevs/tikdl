@@ -36,6 +36,9 @@
 
   --h-pill: 22px;
   --h-control: 30px;
+  --h-switch: 18px;
+  --w-switch: 32px;
+  --t-fast: 150ms;
   --icon: 16px;
   --icon-btn: 24px;
   --r-1: 5px;

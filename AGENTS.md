@@ -10,7 +10,10 @@ Also a CLI (`tikdl serve|get|shares|stop`). User-facing text is Russian; code an
 - `src-tauri/src/core.rs` — transfer core: node, stores (`store/` = shares, served; `downloads/` = received, never served),
   share, download, peek (contents before download), space check, link format.
 - `src-tauri/src/main.rs` — window, commands, tray (menu bar), notifications, deep links, CLI.
-- `src-tauri/src/paths.rs` — safe names, export targets, hidden-file filter (tests here).
+- `src-tauri/src/once.rs` — one-time links: throwaway endpoint per link, claim protocol, gate over iroh-blobs,
+  expiry sweep, change signal (`docs/ONCE_LINKS.md`).
+- `src-tauri/src/paths.rs` — safe names, export targets, hidden-file filter, forbidden-share rules
+  (`forbidden_share`: system disk/folders, whole home, keys and settings in home, TikDL's own folder; tests here).
 - `ui/` — interface by the ui-architect skill: `tokens.css` → `kit/` (registry `docs/UI_COMPONENTS.md`, showcase
   `ui/index.html#/kit`) → `screens/`; data `api.js` → `state.js`. `ui/site/` — https landing page for messenger links.
 - `.github/workflows/` — `build.yml` (dmg/exe, sets `TIKDL_LINK_BASE`), `pages.yml` (publishes `ui/site`).
@@ -23,7 +26,7 @@ Also a CLI (`tikdl serve|get|shares|stop`). User-facing text is Russian; code an
 
 ## Checks
 ```
-cd src-tauri && cargo test                     # 6 tests
+cd src-tauri && cargo test                     # 14 tests
 node scripts/ui_check.mjs && npx eslint ui     # UI gates (npm i once)
 (cd ui && python3 -m http.server 8765 --bind 127.0.0.1 &) && node scripts/ui_smoke.mjs
 cd src-tauri && cargo tauri build              # → target/release/bundle/macos/TikDL.app

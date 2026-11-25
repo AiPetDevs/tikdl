@@ -6245,11 +6245,13 @@ name = "tikdl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "data-encoding",
  "dirs 6.0.0",
  "fs4",
  "futures-lite",
  "iroh",
  "iroh-blobs",
+ "postcard",
  "serde",
  "serde_json",
  "tauri",

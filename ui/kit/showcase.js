@@ -7,6 +7,7 @@ import { StatusChip } from './StatusChip.js';
 import { ProgressPill, LinkPill } from './ProgressPill.js';
 import { TransferRow, RowList } from './TransferRow.js';
 import { Tabs } from './Tabs.js';
+import { Switch } from './Switch.js';
 import { TextArea, TextField, PathField } from './Field.js';
 import { FileList } from './FileList.js';
 import { DropOverlay } from './DropOverlay.js';
@@ -15,7 +16,7 @@ import { downloadView, shareView, preparingView, peekView } from '../state.js';
 const MB = 1024 * 1024;
 const section = (title, ...kids) => Stack(h('h2', { class: 'tk-show__h', text: title }), ...kids);
 const label = t => h('div', { class: 'tk-show__label', text: t });
-const ICONS = { pause: 'pause', resume: 'play', remove: 'x', forget: 'x', reveal: 'reveal', copy: 'copy', stop: 'x', drop: 'x' };
+const ICONS = { pause: 'pause', resume: 'play', remove: 'x', forget: 'x', reveal: 'reveal', copy: 'copy', stop: 'x', drop: 'x', renew: 'renew' };
 const acts = (keys, arm) => keys.map(k => IconButton({ icon: ICONS[k], help: k, arm: arm && k === 'remove' ? 'Нажмите ещё раз' : undefined, doneIcon: k === 'copy' ? 'check' : undefined }));
 const dlRow = d => { const v = downloadView(d); return TransferRow({ kind: 'down', title: v.title, hint: v.hint, chip: v.chip, body: ProgressPill(v.pill).el, actions: acts(v.actions, true) }).el; };
 const shRow = s => { const v = shareView(s); const body = v.link ? LinkPill({ value: v.link, note: v.note }) : ProgressPill(v.pill).el; return TransferRow({ kind: 'up', title: v.title, chip: v.chip, body, actions: acts(v.actions) }).el; };
@@ -35,14 +36,20 @@ export function Showcase() {
   sh.append(
     TransferRow({ kind: 'up', ...preparingView({ path: '/Users/me/Видео', done: 3, total: 12 }), body: ProgressPill(preparingView({ done: 3, total: 12 }).pill).el }).el,
     shRow({ root: 'r1', source: '/Users/me/Pictures/Фото', link: 'tikdl://get/blobacahq3x2kq7demolinkvalue', files: 12, skipped: 2, total: 640 * MB, state: 'active' }),
-    shRow({ root: 'r2', source: '/Users/me/Документы/Отчёт.pdf', link: '', files: 1, skipped: 0, total: 2 * MB, state: 'changed' }));
+    shRow({ root: 'r2', source: '/Users/me/Документы/Отчёт.pdf', link: '', files: 1, skipped: 0, total: 2 * MB, state: 'changed' }),
+    shRow({ root: 'r4', source: '/Users/me', link: '', files: 3, skipped: 0, total: 9 * MB, state: 'forbidden', why: 'это вся домашняя папка — раздайте нужную папку внутри неё' }));
+  const soon = Date.now() / 1000 + 3 * 86400;
+  const once = (state, extra = {}) => shRow({ root: 'o', source: '/Users/me/Документы/Договор.pdf', link: '', files: 1, skipped: 0, total: 3 * MB, state: 'active', once: { state, device: '3f9a0c1d', expires: soon }, ...extra });
+  const oneTime = RowList();
+  oneTime.append(once('waiting', { link: 'tikdl://get/onceaacq2demolinkvalue' }), once('waiting'), once('claimed'), once('used'), once('expired'));
   const tabs = Tabs({ items: [{ id: 'a', text: 'Скачать' }, { id: 'b', text: 'Раздать' }] });
 
   return Page(
     h('h1', { class: 'tk-show__h', text: 'Кит TikDL — витрина' }),
     section('Tabs', tabs.el),
+    section('Switch', Switch({ label: 'Одноразовая ссылка', hint: 'выкл' }).el, Switch({ label: 'Одноразовая ссылка', value: true, hint: 'вкл' }).el),
     section('Button', Line(Button({ text: 'Скачать', variant: 'primary', wide: true }), Button({ text: 'Папка…' }), Button({ text: 'Отмена' }))),
-    section('IconButton', Line(...['pause', 'play', 'reveal', 'copy'].map(i => IconButton({ icon: i, help: i })),
+    section('IconButton', Line(...['pause', 'play', 'reveal', 'copy', 'renew'].map(i => IconButton({ icon: i, help: i })),
       IconButton({ icon: 'x', help: 'с подтверждением', arm: 'Нажмите ещё раз' })), label('✕ — первое нажатие взводит (красный), второе выполняет')),
     section('StatusChip', Line(...[['подключение', 'dim'], ['на паузе', 'warn'], ['готово', 'ok'], ['сбой', 'bad']].map(([text, tone]) => StatusChip({ text, tone })))),
     section('ProgressPill', label('idle / run / done / fail / размер неизвестен'),
@@ -52,6 +59,7 @@ export function Showcase() {
     section('LinkPill', LinkPill({ value: 'tikdl://get/blobacahq3x2kq7demolinkvalue', note: '12 файлов · 640.0 МБ' })),
     section('TransferRow — загрузки (все состояния)', dl),
     section('TransferRow — раздачи', sh),
+    section('TransferRow — одноразовые раздачи: ждёт (ссылка / подключение) · закреплена · получено · срок истёк', oneTime),
     section('FileList — «Что внутри?»', FileList(peekView({ state: 'done', total: 70 * MB, free: 5 * 1024 * MB, space_error: null,
       files: Array.from({ length: 10 }, (_, i) => [`Отпуск/IMG_${1000 + i}.jpg`, 7 * MB]) })).el,
       Text(peekView({ state: 'done', total: 70 * MB, free: 20 * MB, space_error: 'не хватает места на диске (/Volumes/USB): нужно 134.0 МБ, свободно 20.0 МБ', files: [] }).status.text, 'bad')),

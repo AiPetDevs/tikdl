@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod core;
+mod once;
 mod paths;
 
 use std::{
@@ -28,6 +29,11 @@ struct DlRecord {
     /// running | paused | done | error
     state: String,
     message: Option<String>,
+    /// One-time link: everything is on disk, the sender has not yet heard "done" (retried at start).
+    #[serde(default)]
+    ack_pending: bool,
+    #[serde(default)]
+    ack_tries: u32,
 }
 
 struct Job {
@@ -90,6 +96,10 @@ struct LinkInfo {
     size: Option<u64>,
     /// ID узла отправителя — показывается в окне подтверждения.
     from: String,
+    /// Одноразовая ссылка: имени и размера в ней нет; скачать сможет одно устройство.
+    once: bool,
+    /// Этот компьютер (8 знаков) — сверить с отправителем, за кем закреплена ссылка.
+    me: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -132,14 +142,25 @@ impl Speed {
 }
 
 #[tauri::command]
-fn inspect_link(link: String) -> Result<LinkInfo, String> {
+async fn inspect_link(state: State<'_, AppState>, link: String) -> Result<LinkInfo, String> {
     let l = core::parse_link(&link).map_err(|e| e.to_string())?;
-    Ok(LinkInfo {
-        id: l.ticket.hash().to_string(),
-        name: l.name,
-        size: l.size,
-        from: l.ticket.addr().id.to_string(),
-    })
+    let me = match l.once() {
+        Some(_) => state.node.get().map(|n| n.short_id()),
+        None => None,
+    };
+    Ok(LinkInfo { id: l.record_id(), name: l.name(), size: l.size(), from: l.from(), once: l.once().is_some(), me })
+}
+
+/// A one-time link this computer has already received: no claim over the network (it would only time out —
+/// the sender's throwaway endpoint is gone), a plain answer instead.
+async fn already_received(state: &AppState, l: &core::Link) -> Result<(), String> {
+    if l.once().is_some() {
+        let id = l.record_id();
+        if state.downloads.lock().await.iter().any(|r| r.id == id && r.state == "done") {
+            return Err("уже получено на этом компьютере — одноразовая ссылка сгорела".into());
+        }
+    }
+    Ok(())
 }
 
 /// Что внутри раздачи — по явной просьбе пользователя («Что внутри?»): только тогда узел подключается
@@ -157,10 +178,13 @@ struct PeekInfo {
 #[tauri::command]
 async fn peek_link(state: State<'_, AppState>, link: String, dest: String) -> Result<PeekInfo, String> {
     let l = core::parse_link(&link).map_err(|e| e.to_string())?;
+    already_received(&state, &l).await?;
     let node = state.node().await?;
-    let p = node.peek(&l.ticket).await.map_err(|e| format!("{e:#}"))?;
+    // one-time link: «Что внутри?» binds this device (the root is learned only from the claim)
+    let ticket = node.resolve(&l).await.map_err(|e| format!("{e:#}"))?;
+    let p = node.peek(&ticket).await.map_err(|e| format!("{e:#}"))?;
     let dest = PathBuf::from(dest);
-    let space_error = node.check_space(l.ticket.hash(), p.total, &dest).await.err().map(|e| format!("{e:#}"));
+    let space_error = node.check_space(ticket.hash(), p.total, &dest).await.err().map(|e| format!("{e:#}"));
     Ok(PeekInfo { total: p.total, name: p.name, files: p.files, free: core::free_space(&dest), space_error })
 }
 
@@ -238,7 +262,8 @@ async fn start_download(
     dest: String,
 ) -> Result<String, String> {
     let l = core::parse_link(&link).map_err(|e| e.to_string())?;
-    let id = l.ticket.hash().to_string();
+    already_received(&state, &l).await?;
+    let id = l.record_id();
     {
         let mut list = state.downloads.lock().await;
         match list.iter_mut().find(|r| r.id == id) {
@@ -254,11 +279,13 @@ async fn start_download(
                     id: id.clone(),
                     link: link.clone(),
                     dest: dest.clone(),
-                    name: l.name.clone(),
-                    total: l.size,
+                    name: l.name(),
+                    total: l.size(),
                     bytes: 0,
                     state: "running".into(),
                     message: None,
+                    ack_pending: false,
+                    ack_tries: 0,
                 },
             ),
         }
@@ -284,7 +311,7 @@ async fn spawn_job(
     }
     jobs.retain(|_, j| !j.handle.is_finished());
     let (cancel, cancel_rx) = watch::channel(false);
-    let mut total = l.size;
+    let mut total = l.size();
     let id2 = id.clone();
     let app2 = app.clone();
     let handle = tokio::spawn(async move {
@@ -301,9 +328,23 @@ async fn spawn_job(
             message: Some("Подключение…".into()),
             name: None,
         });
-        // Ссылка без размера (голый тикет): узнаём размер и имя у раздающего, иначе полоса стоит на месте.
+        // Одноразовая ссылка: сначала привязка этого устройства, корень раздачи узнаём из ответа.
+        let ticket = match node.resolve(&l).await {
+            Ok(t) => t,
+            Err(e) => {
+                let message = Some(format!("{e:#}"));
+                st.update(&id2, |r| {
+                    r.state = "error".into();
+                    r.message = message.clone();
+                })
+                .await;
+                emit(Progress { id: id2.clone(), bytes: 0, total, speed: 0.0, state: "error".into(), message, name: None });
+                return;
+            }
+        };
+        // Ссылка без размера (голый тикет, одноразовая): узнаём размер и имя у раздающего, иначе полоса стоит на месте.
         if total.is_none() {
-            if let Ok(peek) = node.peek(&l.ticket).await {
+            if let Ok(peek) = node.peek(&ticket).await {
                 total = Some(peek.total);
                 let name = peek.name.clone();
                 st.update(&id2, |r| {
@@ -326,7 +367,7 @@ async fn spawn_job(
         }
         // Места не хватит — отказ до первого байта, а не забитый диск посреди загрузки.
         let space = match total {
-            Some(t) => node.check_space(l.ticket.hash(), t, &dest).await,
+            Some(t) => node.check_space(ticket.hash(), t, &dest).await,
             None => Ok(()),
         };
         let mut speed = Speed::new();
@@ -335,7 +376,7 @@ async fn spawn_job(
         let res = match space {
             Err(e) => Err(e),
             Ok(()) => node
-            .download(&l.ticket, &dest, cancel_rx, |bytes| {
+            .download(&ticket, &id2, &dest, cancel_rx, |bytes| {
                 last_bytes = bytes;
                 let s = speed.push(bytes);
                 if last_emit.elapsed() < Duration::from_millis(250) {
@@ -354,6 +395,25 @@ async fn spawn_job(
             })
             .await,
         };
+        if let Ok(path) = &res {
+            // The file is in place: the record says "done" before anything else, so a crash or quit from here on
+            // never restarts the download (no "name (1)", no false "сбой"). One-time link: "done" is owed to the
+            // sender — recorded in the same write, before the tag goes, so it cannot be lost either.
+            let (once, message, bytes) = (l.once().is_some(), path.to_string_lossy().to_string(), total.unwrap_or(last_bytes).max(last_bytes));
+            st.update(&id2, |r| {
+                r.state = "done".into();
+                r.message = Some(message.clone());
+                r.bytes = bytes;
+                r.ack_pending |= once;
+            })
+            .await;
+            if let Err(e) = node.forget_download(&id2).await {
+                eprintln!("не удалось снять тег загрузки: {e:#}");
+            }
+            if let Some(t) = l.once() {
+                send_done(&st, &node, &id2, t).await;
+            }
+        }
         // Состояние решает сама задача — «пауза» не может прийти после «готово».
         let (state_name, message, bytes) = match &res {
             Ok(path) => ("done", Some(path.to_string_lossy().to_string()), total.unwrap_or(last_bytes).max(last_bytes)),
@@ -381,6 +441,23 @@ async fn spawn_job(
     });
     jobs.insert(id, Job { cancel, handle });
     Ok(())
+}
+
+/// One-time link received: tell the sender (the link burns), then drop the token from the saved link.
+/// Not delivered — retried at the next start, at most 5 times; the sender's link expires by itself anyway.
+async fn send_done(st: &AppState, node: &core::Node, id: &str, t: &once::OnceTicket) {
+    let ok = node.once_done(t).await;
+    st.update(id, |r| {
+        r.ack_tries += 1;
+        if ok.is_ok() || r.ack_tries >= 5 {
+            r.ack_pending = false;
+            r.link.clear(); // the token is no use to anyone any more
+        }
+    })
+    .await;
+    if let Err(e) = ok {
+        eprintln!("отправитель не получил «получено»: {e:#}");
+    }
 }
 
 #[tauri::command]
@@ -422,8 +499,8 @@ async fn remove_download(state: State<'_, AppState>, id: String) -> Result<(), S
         list.retain(|r| r.id != id);
         save_downloads(&list);
     }
-    if let (Ok(node), Ok(hash)) = (state.node().await, id.parse()) {
-        node.forget_download(hash).await.map_err(|e| format!("{e:#}"))?;
+    if let Ok(node) = state.node().await {
+        node.forget_download(&id).await.map_err(|e| format!("{e:#}"))?;
     }
     Ok(())
 }
@@ -434,10 +511,11 @@ struct ShareProgress {
     total: usize,
 }
 
+/// Запрещённые папки (системные, домашняя целиком, ключи программ, папка TikDL) отсекает Node::share.
 #[tauri::command]
-async fn share_path(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<core::Shared, String> {
+async fn share_path(app: AppHandle, state: State<'_, AppState>, path: String, once: bool) -> Result<core::Shared, String> {
     let node = state.node().await?;
-    node.share(&PathBuf::from(path), |done, total| {
+    node.share(&PathBuf::from(path), once, |done, total| {
         let _ = app.emit("share-progress", ShareProgress { done, total });
     })
     .await
@@ -450,19 +528,48 @@ async fn list_shares(state: State<'_, AppState>) -> Result<Vec<core::Shared>, St
 }
 
 #[tauri::command]
-async fn stop_share(state: State<'_, AppState>, root: String) -> Result<(), String> {
-    state.node().await?.stop_share(&root).await.map_err(|e| format!("{e:#}"))
+async fn stop_share(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state.node().await?.stop_share(&id).await.map_err(|e| format!("{e:#}"))
+}
+
+/// One-time share: a new link (the old one stops working, whoever holds it).
+#[tauri::command]
+async fn renew_share(state: State<'_, AppState>, id: String) -> Result<core::Shared, String> {
+    state.node().await?.renew_once(&id).await.map_err(|e| format!("{e:#}"))
+}
+
+/// What the CLI says about a one-time link's stage.
+fn once_stage(o: &core::OnceView) -> String {
+    match o.state.as_str() {
+        "waiting" => "одноразовая ссылка: ждёт получателя".into(),
+        "claimed" => format!("одноразовая ссылка: закреплена за устройством {}", o.device.as_deref().unwrap_or("?")),
+        "used" => format!("одноразовая ссылка: получено устройством {} — ссылка сгорела", o.device.as_deref().unwrap_or("?")),
+        _ => "одноразовая ссылка: срок истёк".into(),
+    }
 }
 
 fn print_share(s: &core::Shared) {
-    let state = if s.state == "active" { "раздаётся" } else { "НЕ раздаётся: исходные файлы изменились" };
-    println!(
-        "{}\n  {} · файлов: {}, пропущено скрытых: {} · {}\n  {}\n",
-        s.source, s.root, s.files, s.skipped, state, s.link
-    );
-    if let Some(w) = &s.web_link {
-        println!("  для мессенджеров: {w}\n");
+    let state = match (s.state.as_str(), &s.once) {
+        ("active", Some(o)) => once_stage(o),
+        // received or expired stays so even if the source files changed afterwards
+        ("changed", Some(o)) if matches!(o.state.as_str(), "used" | "expired") => once_stage(o),
+        ("active", None) => "раздаётся".into(),
+        ("forbidden", _) => format!("НЕ раздаётся: {}", s.why.as_deref().unwrap_or("такие папки TikDL не раздаёт")),
+        _ => "НЕ раздаётся: исходные файлы изменились".into(),
+    };
+    println!("{}\n  {} · файлов: {}, пропущено скрытых: {} · {}", s.source, s.id, s.files, s.skipped, state);
+    if s.state == "active" && s.link.is_empty() && s.once.as_ref().is_some_and(|o| o.state == "waiting") {
+        println!("  ссылки пока нет: нет связи с relay — она появится здесь, когда связь будет");
     }
+    if s.state == "active" && !s.link.is_empty() {
+        println!("  {}", s.link);
+        if let Some(w) = &s.web_link {
+            println!("  для мессенджеров: {w}");
+        }
+    } else if s.state != "active" || s.once.as_ref().is_some_and(|o| !matches!(o.state.as_str(), "waiting" | "claimed")) {
+        println!("  убрать из списка: tikdl stop {}", s.id);
+    }
+    println!();
 }
 
 /// Режим без окна для сервера.
@@ -479,23 +586,73 @@ async fn cli_inner(node: &core::Node, args: &[String]) -> anyhow::Result<()> {
             let link = args.get(1).ok_or_else(|| anyhow::anyhow!("нужна ссылка"))?;
             let dest = args.get(2).ok_or_else(|| anyhow::anyhow!("нужна папка"))?;
             let l = core::parse_link(link)?;
+            if l.once().is_some() {
+                eprintln!("Одноразовая ссылка: закрепляю за этим устройством ({})…", node.short_id());
+            }
+            let ticket = node.resolve(&l).await?;
+            let id = l.record_id();
             let (_keep, never) = watch::channel(false);
             let p = node
-                .download(&l.ticket, Path::new(dest), never, |b| eprint!("\r{b} байт"))
+                .download(&ticket, &id, Path::new(dest), never, |b| eprint!("\r{b} байт"))
                 .await?;
+            node.forget_download(&id).await?;
             eprintln!("\nГотово: {}", p.display());
+            if let Some(t) = l.once() {
+                match node.once_done(t).await {
+                    Ok(()) => eprintln!("Отправитель знает, что получено: ссылка сгорела."),
+                    Err(e) => eprintln!("Отправитель не получил «получено» ({e:#}); его ссылка истечёт сама."),
+                }
+            }
         }
         Some("serve") => {
-            for p in &args[1..] {
-                print_share(&node.share(Path::new(p), |_, _| {}).await?);
+            // --once: the paths after it get one-time links (one device, burned once received)
+            let once = args.iter().any(|a| a == "--once");
+            let paths: Vec<&String> = args[1..].iter().filter(|a| *a != "--once").collect();
+            let mut failed = 0;
+            for p in &paths {
+                // a refused path does not stop the others
+                match node.share(Path::new(p.as_str()), once, |_, _| {}).await {
+                    Ok(shared) => print_share(&shared),
+                    Err(e) => {
+                        failed += 1;
+                        eprintln!("Ошибка: {p}: {e:#}\n");
+                    }
+                }
             }
-            if args.len() == 1 {
+            if !paths.is_empty() && failed == paths.len() {
+                anyhow::bail!("ничего не раздаётся");
+            }
+            if paths.is_empty() {
                 for s in node.list_shares().await {
                     print_share(&s);
                 }
             }
             println!("Раздача идёт. Узел: {}. Ctrl+C — остановить.", node.endpoint().id());
-            tokio::signal::ctrl_c().await?;
+            // one-time links: say when a stage changes (claimed by a device, received, expired)
+            let mut rx = node.watch_once();
+            let mut seen: HashMap<String, String> = node
+                .list_shares()
+                .await
+                .into_iter()
+                .filter_map(|s| s.once.as_ref().map(|o| (s.id.clone(), format!("{}|{}", o.state, s.link.is_empty()))))
+                .collect();
+            loop {
+                tokio::select! {
+                    r = tokio::signal::ctrl_c() => { r?; break; }
+                    r = rx.changed() => { if r.is_err() { break; } }
+                }
+                for s in node.list_shares().await {
+                    if let Some(o) = &s.once {
+                        let now = format!("{}|{}", o.state, s.link.is_empty());
+                        if seen.insert(s.id.clone(), now.clone()).is_some_and(|old| old != now) {
+                            println!("{} — {}", s.name, once_stage(o));
+                            if o.state == "waiting" && !s.link.is_empty() {
+                                println!("  {}", s.link);
+                            }
+                        }
+                    }
+                }
+            }
         }
         Some("shares") => {
             for s in node.list_shares().await {
@@ -503,16 +660,16 @@ async fn cli_inner(node: &core::Node, args: &[String]) -> anyhow::Result<()> {
             }
         }
         Some("stop") => {
-            let root = args.get(1).ok_or_else(|| anyhow::anyhow!("нужен идентификатор раздачи"))?;
-            node.stop_share(root).await?;
-            println!("Раздача остановлена: {root}");
+            let id = args.get(1).ok_or_else(|| anyhow::anyhow!("нужен идентификатор раздачи"))?;
+            node.stop_share(id).await?;
+            println!("Раздача остановлена: {id}");
         }
         _ => unreachable!(),
     }
     Ok(())
 }
 
-const USAGE: &str = "tikdl get <ссылка> <папка> | serve [путь ...] | shares | stop <id>";
+const USAGE: &str = "tikdl get <ссылка> <папка> | serve [--once] [путь ...] | shares | stop <id>";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -585,6 +742,24 @@ fn main() {
                         let _ = spawn_job(h.clone(), &st, l, r.id.clone(), PathBuf::from(&r.dest)).await;
                     }
                 }
+                let acks: Vec<DlRecord> = st.downloads.lock().await.iter().filter(|r| r.ack_pending).cloned().collect();
+                if let Ok(node) = st.node().await {
+                    for r in acks {
+                        if let Ok(core::Link::Once(t)) = core::parse_link(&r.link) {
+                            send_done(&st, &node, &r.id, &t).await;
+                        }
+                    }
+                }
+                if let Ok(node) = st.node().await {
+                    // one-time links change stage on their own (claimed, received, expired): tell the window
+                    let mut rx = node.watch_once();
+                    let h2 = h.clone();
+                    tauri::async_runtime::spawn(async move {
+                        while rx.changed().await.is_ok() {
+                            let _ = h2.emit("shares-changed", ());
+                        }
+                    });
+                }
                 let _ = h.emit("node-ready", ());
             });
             Ok(())
@@ -607,7 +782,8 @@ fn main() {
             remove_download,
             share_path,
             list_shares,
-            stop_share
+            stop_share,
+            renew_share
         ])
         .build(tauri::generate_context!())
         .expect("ошибка запуска приложения")

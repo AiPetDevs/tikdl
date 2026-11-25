@@ -1,6 +1,6 @@
 # HANDOFF — TikDL
 
-## State (2026-11-24)
+## State (2026-11-25)
 Version 0.1.0, last code commit `51e6b5f`. Built app: `src-tauri/target/release/bundle/macos/TikDL.app` (matches code).
 Done in this session: audit (`docs/AUDIT_2026-11-23.md`), P0 and P1 fixes, UI rebuilt by ui-architect (bar like the
 owner's TransferBar sample), owner remark R3 (bar moves for links without size), weak points batch (owner asks A5–A10).
@@ -11,8 +11,19 @@ owner's TransferBar sample), owner remark R3 (bar moves for links without size),
 - Link has no IP (node id + relay only); download through it works.
 - «Что внутри?» on the confirm card: files, sizes, real total, free space; nothing downloaded.
 - Bare link (no `?size=&name=`): size learned from sender, progress, file identical (rechecked 2026-11-23 23:43).
-- All gates green: `cargo test` 6/6, `ui_check` 0/0/0, ESLint clean, `ui_smoke` 4/4.
+- All gates green (2026-11-25): `cargo test` 8/8, `ui_check` 0/0/0, ESLint clean, `ui_smoke` 4/4.
+- 2026-11-25: owner's decision — system disk/folders are never shared (no confirmation dialog). `paths::forbidden_share`
+  in `Node::share`: system disk, system folders, whole home and its parents, hidden entries in home, ~/Library (except
+  iCloud Drive / CloudStorage), AppData, TikDL's folder; compared by inode, so symlinks, letter case and
+  /System/Volumes/Data firmlinks do not bypass it. Old share records from such folders → state "forbidden", not served.
+  Verified live: CLI refuses 14 paths incl. aliases; app shows «Applications: это системная папка — TikDL её не раздаёт»;
+  a forbidden old record shows «запрещено» and «Убрать из списка» removes it. The dmg in `../_RESULTS` predates this.
 
+- 2026-11-25: one-time links (owner asks A20/A21). Design + verification: `docs/ONCE_LINKS.md`; explanation for the
+  owner: `docs/answers/once-links.html`; prior art: `docs/research/ONCE_PRIOR_ART.md`. Throwaway endpoint per link
+  (`src-tauri/src/once.rs`), claim binds the first device, done ack burns it. Live: 1.5 GB, A SIGKILLed at 133 MB, B
+  refused, sender crashed + restarted, A resumed from 133 MB, byte-identical, burned; release window followed stages
+  (`docs/plans/evidence/once_*`). `cargo test` 14/14.
 - 2026-11-24: menu bar icon, close → keeps sharing, «Открыть»/«Выйти» (W7); drag file+folder from Finder (W8);
   bar on a bare link (R3). Notification is sent (in macOS notification DB) — see below.
 
@@ -22,6 +33,9 @@ owner's TransferBar sample), owner remark R3 (bar moves for links without size),
 - Dock-icon click reopening the window.
 - https link via GitHub Pages (needs repo on GitHub + Settings → Pages → Source = GitHub Actions).
 - Windows/Linux at all; CI never run; clippy never run locally.
+- One-time links across two real networks (checked on one Mac through the relay only); picking the file for a one-time
+  share through the window's file dialog (the dialog runs out of process, automation could not type into it — the
+  switch, rows and live stages were checked with a share created by the CLI in a test profile).
 
 ## Next step (exact)
 dmg built 2026-11-24: `../_RESULTS/TikDL_0.1.0_universal.dmg` (universal, ad-hoc signed). Next: owner installs it; for wider sharing — Apple Developer
@@ -36,6 +50,8 @@ None from this session (A5–A10, A13, A14 closed).
   `Error::Io`. Use the default Copy (reflink on APFS). Details: `docs/IDEAS_LEDGER.md`.
 - `ui/site/tokens.css` is a local copy only for previewing the landing page; delete it after, or `ui_check` reports
   duplicate blocks (it is in `.gitignore`).
+- Live tests with background CLI jobs: `kill -INT` does nothing (background jobs ignore SIGINT) — use `kill -9` for a
+  "pause", and wait until the old process is gone before restarting on the same profile (store lock).
 - Launch the app with `open` (not the binary directly), otherwise its window may land on another Space and ignore clicks.
 - The CLI and the app share one data folder: do not run both on the same profile; use `HOME=<dir>` for the CLI.
 - Landing page navigates to `tikdl://`; in Playwright use `waitUntil: 'commit'`.

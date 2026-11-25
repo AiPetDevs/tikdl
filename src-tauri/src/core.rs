@@ -41,6 +41,7 @@ use iroh_blobs::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::{watch, Mutex};
 
+use crate::once::{self, OnceRec, OnceTicket};
 use crate::paths;
 
 pub const SCHEME: &str = "tikdl://get/";
@@ -85,13 +86,17 @@ fn mtime_secs(m: &std::fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 /// Запись реестра раздач (shares.json).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ShareRecord {
+    /// Record id: the root for a public share (as in older versions), `once-<16 hex>` for a one-time share —
+    /// the same content can be shared both ways, so nothing is keyed by the root.
+    #[serde(default)]
+    pub id: String,
     pub root: String,
     pub name: String,
     pub source: PathBuf,
@@ -99,10 +104,12 @@ pub struct ShareRecord {
     pub skipped: usize,
     pub total: u64,
     pub created: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub once: Option<OnceRec>,
 }
 
 impl ShareRecord {
-    fn unchanged(&self) -> bool {
+    pub(crate) fn unchanged(&self) -> bool {
         self.files.iter().all(SourceFile::unchanged)
     }
 }
@@ -110,6 +117,9 @@ impl ShareRecord {
 /// Раздача для интерфейса.
 #[derive(Serialize, Clone, Debug)]
 pub struct Shared {
+    pub id: String,
+    /// "forbidden": why TikDL does not share this folder.
+    pub why: Option<String>,
     pub root: String,
     pub name: String,
     pub source: String,
@@ -121,8 +131,19 @@ pub struct Shared {
     /// Скрытые и служебные файлы, которые не вошли в раздачу папки (.git, .env, .DS_Store …).
     pub skipped: usize,
     pub total: u64,
-    /// "active" — раздаётся; "changed" — исходные файлы изменились или пропали, не раздаётся.
+    /// "active" — раздаётся; "changed" — исходные файлы изменились или пропали, не раздаётся;
+    /// "forbidden" — папка из тех, что TikDL не раздаёт (раздача от старой версии), не раздаётся.
     pub state: String,
+    /// One-time share: its stage, the bound device (8 hex) and when it stops by itself.
+    pub once: Option<OnceView>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct OnceView {
+    /// waiting | claimed | used | expired
+    pub state: String,
+    pub device: Option<String>,
+    pub expires: u64,
 }
 
 pub struct Node {
@@ -135,7 +156,9 @@ pub struct Node {
     dir: PathBuf,
     /// Хеши, которые сеть может отдать: корни активных раздач и всё внутри них.
     allow: Arc<RwLock<HashSet<Hash>>>,
-    shares: Mutex<Vec<ShareRecord>>,
+    shares: Arc<Mutex<Vec<ShareRecord>>>,
+    once: Arc<once::Host>,
+    sweeper: tokio::task::JoinHandle<()>,
 }
 
 pub fn data_dir() -> PathBuf {
@@ -169,7 +192,7 @@ fn load_or_create_key(dir: &Path) -> Result<SecretKey> {
     Ok(key)
 }
 
-async fn bind_endpoint(key: SecretKey, port: u16) -> Result<Endpoint> {
+pub(crate) async fn bind_endpoint(key: SecretKey, port: u16) -> Result<Endpoint> {
     use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
     Ok(Endpoint::builder(presets::N0)
         .secret_key(key)
@@ -255,7 +278,17 @@ impl Node {
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
 
-        let shares = load_shares(dir);
+        let shares = Arc::new(Mutex::new(load_shares(dir)));
+        let host = once::Host::new(store.clone(), dir.to_path_buf(), shares.clone());
+        // One-time links: endpoints come up in the background; expiry is checked every minute.
+        tokio::spawn(host.clone().start_all());
+        let h = host.clone();
+        let sweeper = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                h.sweep().await;
+            }
+        });
         let node = Self {
             store,
             dl,
@@ -263,7 +296,9 @@ impl Node {
             router,
             dir: dir.to_path_buf(),
             allow,
-            shares: Mutex::new(shares),
+            shares,
+            once: host,
+            sweeper,
         };
         node.refresh_allow().await;
         if let Err(e) = node.remove_orphans(&dl_dir.join("data")).await {
@@ -275,6 +310,9 @@ impl Node {
     /// Корректное завершение: закрыть сеть и записать базы хранилищ на диск.
     /// Без этого последняя пачка изменений базы (до 1 с) теряется, а файлы остаются сиротами.
     pub async fn shutdown(&self) {
+        self.sweeper.abort();
+        self.once.sweep().await; // saves the last-activity marks
+        self.once.stop_all().await; // before the store: their handlers serve from it
         let _ = self.router.shutdown().await;
         let _ = self.store.shutdown().await;
         let _ = self.dl.shutdown().await;
@@ -303,22 +341,33 @@ impl Node {
         self.router.endpoint()
     }
 
-    /// Корень раздачи и все хеши внутри (метаданные коллекции + файлы).
-    async fn members(&self, root: Hash) -> Result<Vec<Hash>> {
-        let bytes = self.store.blobs().get_bytes(root).await?;
-        let seq = HashSeq::try_from(bytes)?;
-        let mut v = vec![root];
-        v.extend(seq.iter());
-        Ok(v)
+
+    /// Раздача из папки, которую TikDL не раздаёт (могла остаться от версии до запрета): не отдаётся.
+    /// Вторая проверка — файлы из папки TikDL, попавшие в раздачу старой версией.
+    fn forbidden(&self, r: &ShareRecord) -> bool {
+        self.forbidden_why(r).is_some()
     }
 
-    /// Пересобрать белый список из реестра: только раздачи с неизменёнными исходными файлами.
+    /// Why an old record is not served (the precise reason for its row).
+    fn forbidden_why(&self, r: &ShareRecord) -> Option<String> {
+        if let Some(why) = paths::forbidden_share(&r.source, dirs::home_dir().as_deref(), &self.dir) {
+            return Some(why.to_string());
+        }
+        r.files
+            .iter()
+            .any(|f| f.path.starts_with(&self.dir))
+            .then(|| "в раздаче есть файлы TikDL (ключ узла или хранилище)".to_string())
+    }
+
+    /// Пересобрать белый список из реестра: только раздачи с неизменёнными исходными файлами
+    /// и не из запрещённых папок.
     async fn refresh_allow(&self) {
         let records = self.shares.lock().await.clone();
         let mut set = HashSet::new();
-        for r in records.iter().filter(|r| r.unchanged()) {
+        // One-time shares are never served by the node's own id: only their throwaway endpoints serve them.
+        for r in records.iter().filter(|r| r.once.is_none() && r.unchanged() && !self.forbidden(r)) {
             let Ok(root) = r.root.parse::<Hash>() else { continue };
-            match self.members(root).await {
+            match members(&self.store, root).await {
                 Ok(m) => set.extend(m),
                 Err(e) => eprintln!("раздача {} недоступна: {e:#}", r.name),
             }
@@ -329,13 +378,40 @@ impl Node {
     }
 
     fn view(&self, r: &ShareRecord) -> Shared {
-        let state = if r.unchanged() { "active" } else { "changed" };
-        let link = r
-            .root
-            .parse::<Hash>()
-            .map(|root| make_link(&self.endpoint().addr(), root, r.total, &r.name))
-            .unwrap_or_default();
+        let why = self.forbidden_why(r);
+        let state = if why.is_some() {
+            "forbidden"
+        } else if r.unchanged() {
+            "active"
+        } else {
+            "changed"
+        };
+        let link = match &r.once {
+            None => r
+                .root
+                .parse::<Hash>()
+                .map(|root| make_link(&self.endpoint().addr(), root, r.total, &r.name))
+                .unwrap_or_default(),
+            // The link is handed out only while nobody has claimed it; after that it is useless to anyone else.
+            Some(o) => match (&o.token, self.once.addr(&r.id)) {
+                (Some(t), Some(addr)) if o.state == "waiting" => data_encoding::HEXLOWER
+                    .decode(t.as_bytes())
+                    .ok()
+                    .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                    .map(|token| format!("{SCHEME}{}", OnceTicket { addr, token }.encode()))
+                    .unwrap_or_default(),
+                _ => String::new(),
+            },
+        };
+        let once = r.once.as_ref().map(|o| OnceView {
+            state: o.state.clone(),
+            device: o.bound.as_deref().map(once::short),
+            expires: o.expires(r.created),
+        });
         Shared {
+            id: r.id.clone(),
+            why,
+            once,
             root: r.root.clone(),
             name: r.name.clone(),
             source: r.source.to_string_lossy().to_string(),
@@ -349,6 +425,11 @@ impl Node {
     }
 
     /// Список раздач (заодно перепроверяет исходные файлы и белый список).
+    /// Changes whenever a one-time share changes stage or its link becomes available.
+    pub fn watch_once(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.once.changed.subscribe()
+    }
+
     pub async fn list_shares(&self) -> Vec<Shared> {
         self.refresh_allow().await;
         let records = self.shares.lock().await.clone();
@@ -356,24 +437,78 @@ impl Node {
     }
 
     /// Остановить раздачу: убрать из белого списка, реестра и снять тег.
-    pub async fn stop_share(&self, root: &str) -> Result<()> {
+    pub async fn stop_share(&self, id: &str) -> Result<()> {
         {
             let mut shares = self.shares.lock().await;
             let before = shares.len();
-            shares.retain(|r| r.root != root);
+            shares.retain(|r| r.id != id);
             if shares.len() == before {
                 bail!("такой раздачи нет");
             }
             save_shares(&self.dir, &shares)?;
         }
+        self.once.stop(id).await;
         self.refresh_allow().await;
-        self.store.tags().delete(format!("share-{root}")).await?;
+        self.store.tags().delete(format!("share-{id}")).await?;
         Ok(())
+    }
+
+    /// One-time share: a new link for the same files (the old one, claimed or not, stops working at once).
+    /// For "the wrong device opened it". No re-hashing.
+    pub async fn renew_once(&self, id: &str) -> Result<Shared> {
+        self.once.stop(id).await; // frees its place in the limit before the new endpoint comes up
+        let rec = {
+            let mut shares = self.shares.lock().await;
+            let r = shares.iter_mut().find(|r| r.id == id).ok_or_else(|| anyhow!("такой раздачи нет"))?;
+            if r.once.is_none() {
+                bail!("это не одноразовая раздача");
+            }
+            once_room(&shares, id)?;
+            let r = shares.iter_mut().find(|r| r.id == id).ok_or_else(|| anyhow!("такой раздачи нет"))?;
+            r.once = Some(OnceRec::new().0);
+            r.created = now_secs();
+            let rec = r.clone();
+            save_shares(&self.dir, &shares)?;
+            rec
+        };
+        self.once.spawn(&rec).await?;
+        self.wait_online(&rec).await;
+        Ok(self.view(&rec))
+    }
+
+    async fn wait_online(&self, r: &ShareRecord) {
+        // До 5 с ждём связи с relay, чтобы в ссылку попал адрес посредника (у одноразовой без него ссылки нет).
+        let ep = match &r.once {
+            Some(_) => None,
+            None => Some(self.endpoint().clone()),
+        };
+        let fut = async {
+            match ep {
+                Some(ep) => {
+                    ep.online().await;
+                }
+                None => {
+                    while self.once.running(&r.id) && self.once.addr(&r.id).is_none() {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
+        };
+        let _ = tokio::time::timeout(Duration::from_secs(5), fut).await;
     }
 
     /// Раздать файл или папку. В папке скрытые и служебные файлы пропускаются (аудит P0-3);
     /// явно выбранный файл раздаётся всегда. on_progress(готово_файлов, всего_файлов).
-    pub async fn share(&self, path: &Path, mut on_progress: impl FnMut(usize, usize)) -> Result<Shared> {
+    /// `one_time` — a one-time link: one device, burned once received (once.rs).
+    pub async fn share(&self, path: &Path, one_time: bool, mut on_progress: impl FnMut(usize, usize)) -> Result<Shared> {
+        // Системный диск и папки, домашняя папка целиком, ключи и настройки программ, папка TikDL —
+        // не раздаются никогда (одна точка для окна и консоли).
+        if let Some(why) = paths::forbidden_share(path, dirs::home_dir().as_deref(), &self.dir) {
+            bail!("{why}");
+        }
+        if one_time {
+            once_room(&self.shares.lock().await, "")?; // fail fast, before hashing; re-checked under the lock below
+        }
         let path = std::path::absolute(path)?;
         let name = path
             .file_name()
@@ -383,10 +518,25 @@ impl Node {
         let mut files: Vec<(String, PathBuf)> = Vec::new();
         let mut skipped = 0usize;
         if path.is_file() {
-            files.push((name.clone(), path.clone()));
+            // an explicitly chosen link to a file: share the file itself (checked above by its real place)
+            files.push((name.clone(), std::fs::canonicalize(&path)?));
         } else if path.is_dir() {
-            for e in walkdir::WalkDir::new(&path).follow_links(false) {
-                let e = e?;
+            // TikDL's own folder and the targets of hidden entries of home folders (~/.ssh → ~/Dropbox/ssh) never
+            // leave the machine, even inside a shared parent. Compared by identity, folders only.
+            let prune = paths::forbidden_ids(dirs::home_dir().as_deref(), &self.dir);
+            let walk = walkdir::WalkDir::new(&path).follow_links(false).into_iter();
+            for e in walk.filter_entry(|e| {
+                !e.file_type().is_dir() || paths::file_id(e.path()).is_none_or(|id| !prune.contains(&id))
+            }) {
+                // a folder the user cannot read (system folders on a disk root) is skipped, not fatal
+                let e = match e {
+                    Ok(e) => e,
+                    Err(err) if err.io_error().is_some_and(|io| io.kind() == std::io::ErrorKind::PermissionDenied) => {
+                        skipped += 1;
+                        continue;
+                    }
+                    Err(err) => return Err(err.into()),
+                };
                 if !e.file_type().is_file() {
                     continue;
                 }
@@ -419,6 +569,10 @@ impl Node {
         let mut keep = Vec::new();
         on_progress(0, count);
         for (i, (rel, p)) in files.into_iter().enumerate() {
+            // The file must still be a regular file, not a link swapped in after the walk (it could point at keys).
+            if !std::fs::symlink_metadata(&p).is_ok_and(|m| m.is_file()) {
+                bail!("файл {} подменили во время раздачи — раздайте заново", p.display());
+            }
             // Снимок до хеширования: если файл поменяют во время/после — раздача станет "changed".
             let src = SourceFile::read(&p)?;
             total += src.size;
@@ -439,14 +593,22 @@ impl Node {
         let collection: Collection = items.into_iter().collect();
         let tt = collection.store(&self.store).await?;
         let root = tt.hash();
+        let (id, once) = if one_time {
+            let id = format!("{}-{}", once::PREFIX, &Hash::new(SecretKey::generate().to_bytes()).to_hex()[..16]);
+            (id, Some(OnceRec::new().0))
+        } else {
+            (root.to_string(), None)
+        };
         // Постоянный тег, чтобы раздача пережила перезапуск.
         self.store
             .tags()
-            .set(format!("share-{root}"), tt.hash_and_format())
+            .set(format!("share-{id}"), tt.hash_and_format())
             .await?;
         self.store.sync_db().await?;
 
         let record = ShareRecord {
+            id,
+            once,
             root: root.to_string(),
             name,
             source: path,
@@ -457,15 +619,23 @@ impl Node {
         };
         {
             let mut shares = self.shares.lock().await;
-            shares.retain(|r| r.root != record.root);
+            if record.once.is_some() {
+                if let Err(e) = once_room(&shares, "") {
+                    drop(shares);
+                    let _ = self.store.tags().delete(format!("share-{}", record.id)).await;
+                    return Err(e);
+                }
+            }
+            shares.retain(|r| r.id != record.id);
             shares.push(record.clone());
             save_shares(&self.dir, &shares)?;
         }
-        self.refresh_allow().await;
-
-        // Ждём связи с relay (до 5 с), чтобы в ссылку попал и relay, и прямые адреса.
-        // Сам ключ узла остаётся главным: при смене IP узел находится по нему.
-        let _ = tokio::time::timeout(Duration::from_secs(5), self.endpoint().online()).await;
+        if record.once.is_some() {
+            self.once.spawn(&record).await?;
+        } else {
+            self.refresh_allow().await;
+        }
+        self.wait_online(&record).await;
         Ok(self.view(&record))
     }
 
@@ -544,16 +714,19 @@ impl Node {
 
     /// Скачать по тикету в папку dest. on_progress(скачано_байт, включая скачанное раньше).
     /// `cancel` = true останавливает сетевую часть; экспорт на диск не прерывается.
+    /// `id` — the download record (tag `dl-<id>`); the tag stays until `forget_download` (after the caller has
+    /// recorded what it needs, e.g. the pending "done" of a one-time link).
     pub async fn download(
         &self,
         ticket: &BlobTicket,
+        id: &str,
         dest: &Path,
         mut cancel: watch::Receiver<bool>,
         mut on_progress: impl FnMut(u64),
     ) -> Result<PathBuf> {
         let root = ticket.hash();
         let req = HashAndFormat::hash_seq(root);
-        let tag = format!("dl-{root}");
+        let tag = format!("dl-{id}");
         // Тег ДО скачивания: GC не тронет недокачанное, докачка после паузы и перезапуска.
         self.dl.tags().set(tag.clone(), req).await?;
         self.dl.sync_db().await?;
@@ -562,9 +735,13 @@ impl Node {
         let addr = ticket.addr().clone();
         self.mem.add_endpoint_info(addr.clone());
         let providers = Shuffled::new(vec![addr.id]);
-        let mut stream = self
-            .dl
-            .downloader(self.endpoint())
+        // The pool's default connect timeout (1 s) is too short for a first connection through a relay or
+        // a lookup by id; a slow first connect then failed the whole download with "Unable to download".
+        let mut pool = iroh_blobs::util::connection_pool::Options::default();
+        pool.connect_timeout = Duration::from_secs(15);
+        let mut stream = iroh_blobs::api::downloader::Downloader::builder(&self.dl, self.endpoint())
+            .pool_options(pool)
+            .build()
             .download(req, providers)
             .stream()
             .await?;
@@ -643,16 +820,42 @@ impl Node {
             first.get_or_insert(final_path);
         }
 
-        // 3) Скачанное уже на диске — снимаем тег, GC освободит внутреннюю копию (аудит P1-10).
-        self.dl.tags().delete(tag).await?;
-        self.dl.sync_db().await?;
         Ok(first.unwrap_or_else(|| dest.to_path_buf()))
     }
 
-    /// Забыть недокачанное: снять тег, GC освободит место.
-    pub async fn forget_download(&self, root: Hash) -> Result<()> {
-        self.dl.tags().delete(format!("dl-{root}")).await?;
+    /// Снять тег загрузки: скачанное уже на диске или загрузку отменили — GC освободит внутреннюю копию
+    /// (аудит P1-10).
+    pub async fn forget_download(&self, id: &str) -> Result<()> {
+        self.dl.tags().delete(format!("dl-{id}")).await?;
+        self.dl.sync_db().await?;
         Ok(())
+    }
+
+    /// Ticket to download by: as is for a regular link; for a one-time link the claim binds this device first
+    /// and tells the root.
+    pub async fn resolve(&self, link: &Link) -> Result<BlobTicket> {
+        match link {
+            Link::Blob { ticket, .. } => Ok(ticket.clone()),
+            Link::Once(t) => {
+                if self.once.is_mine(t.addr.id) {
+                    bail!("это ваша собственная одноразовая ссылка — откройте её на том устройстве, которому она предназначена");
+                }
+                self.mem.add_endpoint_info(t.addr.clone());
+                let root = once::claim(self.endpoint(), t).await?;
+                Ok(BlobTicket::new(t.addr.clone(), root, BlobFormat::HashSeq))
+            }
+        }
+    }
+
+    /// One-time link: everything is on disk — the sender burns the link.
+    pub async fn once_done(&self, t: &OnceTicket) -> Result<()> {
+        self.mem.add_endpoint_info(t.addr.clone());
+        once::done(self.endpoint(), t).await
+    }
+
+    /// This device's id as shown next to one-time links (8 hex), to compare with the sender's row.
+    pub fn short_id(&self) -> String {
+        once::short(&self.endpoint().id().to_string())
     }
 }
 
@@ -664,7 +867,16 @@ fn remove_any(p: &Path) {
 /// Адрес для ссылки: ID узла и relay, без IP-адресов — ссылку пересылают кому угодно, а IP раздающего
 /// не должен уходить вместе с ней. Прямое соединение iroh всё равно наладит через relay.
 /// Без relay (нет интернета) остаётся только полный адрес, иначе по ссылке не найти.
-fn public_addr(addr: &iroh::EndpointAddr) -> iroh::EndpointAddr {
+/// Room for one more live one-time link (not counting `except` — the record being renewed).
+fn once_room(shares: &[ShareRecord], except: &str) -> Result<()> {
+    let live = shares.iter().filter(|r| r.id != except && r.once.as_ref().is_some_and(|o| o.live())).count();
+    if live >= once::MAX_LIVE {
+        bail!("одновременно может действовать не больше {} одноразовых ссылок — остановите ненужные", once::MAX_LIVE);
+    }
+    Ok(())
+}
+
+pub(crate) fn public_addr(addr: &iroh::EndpointAddr) -> iroh::EndpointAddr {
     let relays: Vec<_> = addr.addrs.iter().filter(|a| a.is_relay()).cloned().collect();
     if relays.is_empty() {
         addr.clone()
@@ -686,16 +898,30 @@ fn make_link(addr: &iroh::EndpointAddr, root: Hash, total: u64, name: &str) -> S
 
 fn load_shares(dir: &Path) -> Vec<ShareRecord> {
     let path = dir.join(SHARES_FILE);
-    match std::fs::read(&path) {
+    let mut list: Vec<ShareRecord> = match std::fs::read(&path) {
         Ok(b) => serde_json::from_slice(&b).unwrap_or_else(|e| {
             eprintln!("{} повреждён ({e}), список раздач начат заново", path.display());
             Vec::new()
         }),
         Err(_) => Vec::new(),
+    };
+    // records from older versions: id = root
+    for r in list.iter_mut().filter(|r| r.id.is_empty()) {
+        r.id = r.root.clone();
     }
+    list
 }
 
-fn save_shares(dir: &Path, shares: &[ShareRecord]) -> Result<()> {
+/// Корень раздачи и все хеши внутри (метаданные коллекции + файлы).
+pub(crate) async fn members(store: &FsStore, root: Hash) -> Result<Vec<Hash>> {
+    let bytes = store.blobs().get_bytes(root).await?;
+    let seq = HashSeq::try_from(bytes)?;
+    let mut v = vec![root];
+    v.extend(seq.iter());
+    Ok(v)
+}
+
+pub(crate) fn save_shares(dir: &Path, shares: &[ShareRecord]) -> Result<()> {
     let json = serde_json::to_vec_pretty(shares)?;
     paths::write_private(&dir.join(SHARES_FILE), &json).context("не удалось сохранить список раздач")
 }
@@ -751,16 +977,54 @@ fn same_volume(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// Разбор ссылки tikdl://get/<тикет>?size=..&name=.. или «голого» тикета (в т.ч. от sendme).
-pub struct Link {
-    pub ticket: BlobTicket,
-    pub size: Option<u64>,
-    pub name: Option<String>,
+/// Разбор ссылки tikdl://get/<тикет>?size=..&name=.., «голого» тикета (в т.ч. от sendme) или одноразовой
+/// tikdl://get/once<…> (в ней нет ни имени, ни размера, ни хеша).
+pub enum Link {
+    Blob { ticket: BlobTicket, size: Option<u64>, name: Option<String> },
+    Once(OnceTicket),
+}
+
+impl Link {
+    /// Id of the download record: the root for a regular link (as in older versions), `once-…` for a one-time one.
+    pub fn record_id(&self) -> String {
+        match self {
+            Link::Blob { ticket, .. } => ticket.hash().to_string(),
+            Link::Once(t) => t.record_id(),
+        }
+    }
+    pub fn size(&self) -> Option<u64> {
+        match self {
+            Link::Blob { size, .. } => *size,
+            Link::Once(_) => None,
+        }
+    }
+    pub fn name(&self) -> Option<String> {
+        match self {
+            Link::Blob { name, .. } => name.clone(),
+            Link::Once(_) => None,
+        }
+    }
+    /// Sender's endpoint (for a one-time link — its throwaway one).
+    pub fn from(&self) -> String {
+        match self {
+            Link::Blob { ticket, .. } => ticket.addr().id.to_string(),
+            Link::Once(t) => t.addr.id.to_string(),
+        }
+    }
+    pub fn once(&self) -> Option<&OnceTicket> {
+        match self {
+            Link::Once(t) => Some(t),
+            Link::Blob { .. } => None,
+        }
+    }
 }
 
 pub fn parse_link(s: &str) -> Result<Link> {
     let s = s.trim();
     let s = s.strip_prefix(SCHEME).unwrap_or(s);
+    if s.starts_with(once::PREFIX) {
+        return Ok(Link::Once(OnceTicket::decode(s.trim_end_matches('/'))?));
+    }
     let (t, query) = match s.split_once('?') {
         Some((t, q)) => (t, Some(q)),
         None => (s, None),
@@ -777,7 +1041,7 @@ pub fn parse_link(s: &str) -> Result<Link> {
             }
         }
     }
-    Ok(Link { ticket, size, name })
+    Ok(Link::Blob { ticket, size, name })
 }
 
 #[cfg(test)]
@@ -808,4 +1072,282 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }
+
+    /// Address over localhost: tests must not depend on the internet (relay, DNS).
+    pub(super) fn local_addr(ep: &Endpoint) -> iroh::EndpointAddr {
+        let port = ep.bound_sockets().iter().find(|a| a.is_ipv4()).map(|a| a.port()).expect("ipv4 socket");
+        iroh::EndpointAddr::new(ep.id()).with_ip_addr(std::net::SocketAddr::from(([127, 0, 0, 1], port)))
+    }
+
+    /// Fresh temp folder per test (several tests run in parallel in one process).
+    pub(super) fn temp(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tikdl-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    pub(super) fn sample(path: &Path, len: usize) -> Vec<u8> {
+        let data: Vec<u8> = (0..len).map(|i| (i * 7 % 251) as u8).collect();
+        std::fs::write(path, &data).expect("sample file");
+        data
+    }
+
+    /// Two nodes in one process: a share is downloaded byte for byte; the main node refuses a hash outside
+    /// its shares.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn share_and_download_between_two_nodes() -> Result<()> {
+        let base = temp("two-nodes");
+        let file = base.join("hello.bin");
+        let data = sample(&file, 1_500_000);
+        let a = Node::start(&base.join("a")).await?;
+        let b = Node::start(&base.join("b")).await?;
+        let shared = a.share(&file, false, |_, _| {}).await?;
+        let root: Hash = shared.root.parse()?;
+        let dest = base.join("dest");
+        std::fs::create_dir_all(&dest)?;
+        let ticket = BlobTicket::new(local_addr(a.endpoint()), root, BlobFormat::HashSeq);
+        let (_keep, never) = watch::channel(false);
+        let out = tokio::time::timeout(Duration::from_secs(60), b.download(&ticket, &root.to_string(), &dest, never.clone(), |_| {})).await??;
+        assert_eq!(std::fs::read(&out)?, data, "downloaded file must match");
+
+        let stranger = Hash::new(b"not shared");
+        let bad = BlobTicket::new(local_addr(a.endpoint()), stranger, BlobFormat::HashSeq);
+        assert!(b.download(&bad, "bad", &dest, never, |_| {}).await.is_err(), "hash outside shares must be refused");
+        a.shutdown().await;
+        b.shutdown().await;
+        let _ = std::fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    /// One-time share of `file` on `a`; returns its record id and a ticket with a localhost address.
+    async fn once_share(a: &Node, file: &Path) -> Result<(String, OnceTicket)> {
+        let sh = a.share(file, true, |_, _| {}).await?;
+        let rec = a.shares.lock().await.iter().find(|r| r.id == sh.id).cloned().expect("record");
+        let token = data_encoding::HEXLOWER.decode(rec.once.as_ref().unwrap().token.as_ref().unwrap().as_bytes())?;
+        let ep = a.once.endpoint(&sh.id).expect("throwaway endpoint");
+        Ok((sh.id, OnceTicket { addr: local_addr(&ep), token: token.try_into().unwrap() }))
+    }
+
+    async fn once_state(a: &Node, id: &str) -> String {
+        a.shares.lock().await.iter().find(|r| r.id == id).and_then(|r| r.once.clone()).map(|o| o.state).unwrap_or_default()
+    }
+
+    /// The whole life of a one-time link: B gets the file byte for byte, C is refused while B holds it,
+    /// "done" burns it (endpoint gone, key wiped), nobody gets it afterwards; the node's own id never serves it;
+    /// the shared store survives the throwaway router's shutdown.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn once_link_one_device_then_burned() -> Result<()> {
+        let base = temp("once-life");
+        let file = base.join("secret.bin");
+        let data = sample(&file, 1_200_000);
+        let a = Node::start(&base.join("a")).await?;
+        let b = Node::start(&base.join("b")).await?;
+        let c = Node::start(&base.join("c")).await?;
+        let (id, t) = once_share(&a, &file).await?;
+        let link = parse_link(&format!("{SCHEME}{}", t.encode()))?;
+        assert!(link.once().is_some(), "once link parses");
+        assert_eq!(once_state(&a, &id).await, "waiting");
+
+        // the node's own endpoint does not serve the one-time root, even to someone who knows it
+        let root: Hash = a.shares.lock().await.iter().find(|r| r.id == id).unwrap().root.parse()?;
+        let direct = BlobTicket::new(local_addr(a.endpoint()), root, BlobFormat::HashSeq);
+        assert!(b.peek(&direct).await.is_err(), "main id must not serve a one-time share");
+
+        // a wrong token does not bind the link
+        let wrong = OnceTicket { addr: t.addr.clone(), token: [9u8; 32] };
+        assert!(c.resolve(&Link::Once(wrong)).await.is_err(), "wrong token refused");
+        assert_eq!(once_state(&a, &id).await, "waiting", "wrong token must not bind");
+        let mut changes = a.watch_once();
+        changes.mark_unchanged();
+
+        let ticket = b.resolve(&link).await?;
+        assert_eq!(ticket.hash(), root);
+        assert_eq!(once_state(&a, &id).await, "claimed");
+        assert!(changes.has_changed()?, "the window must be told about the claim");
+        changes.mark_unchanged();
+        let err = c.resolve(&link).await.err().map(|e| format!("{e:#}")).unwrap_or_default();
+        assert!(err.contains("другом устройстве"), "second device refused while claimed: {err}");
+        let c_ticket = BlobTicket::new(t.addr.clone(), root, BlobFormat::HashSeq);
+        assert!(c.peek(&c_ticket).await.is_err(), "gate refuses an unbound device");
+
+        let dest = base.join("dest");
+        std::fs::create_dir_all(&dest)?;
+        let (_k, never) = watch::channel(false);
+        let out = b.download(&ticket, &link.record_id(), &dest, never, |_| {}).await?;
+        assert_eq!(std::fs::read(&out)?, data, "byte-identical");
+        b.forget_download(&link.record_id()).await?;
+        b.once_done(link.once().unwrap()).await?;
+        assert_eq!(once_state(&a, &id).await, "used");
+        assert!(changes.has_changed()?, "the window must be told about the burn");
+        let rec = a.shares.lock().await.iter().find(|r| r.id == id).cloned().unwrap();
+        assert!(rec.once.as_ref().unwrap().key.is_none() && rec.once.as_ref().unwrap().token.is_none(), "secrets wiped");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert!(a.once.endpoint(&id).is_none(), "throwaway endpoint shut down");
+        assert!(a.store.blobs().has(root).await?, "shared store alive after the throwaway router shut down");
+
+        let t0 = std::time::Instant::now();
+        let rc = c.resolve(&link).await;
+        eprintln!("after burn, C: {:?} in {:?}", rc.as_ref().err().map(|e| format!("{e:#}")), t0.elapsed());
+        assert!(rc.is_err(), "nobody after the burn");
+        let rb = b.resolve(&link).await;
+        eprintln!("after burn, B: {:?} in {:?}", rb.as_ref().err().map(|e| format!("{e:#}")), t0.elapsed());
+        assert!(rb.is_err(), "not even the same device");
+        assert!(t0.elapsed() < Duration::from_secs(50), "refusal within the timeouts");
+        for n in [a, b, c] {
+            n.shutdown().await;
+        }
+        let _ = std::fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    /// Two devices claim at the same moment: exactly one wins.
+    /// Critic review 2026-11-25: own link refused; «Новая ссылка» gets a new endpoint that a late spawn of the old
+    /// record cannot replace; after stop a late spawn brings nothing back; an expired link cannot be claimed even
+    /// before the sweeper runs; the 11th live link is refused.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn once_link_renew_stale_spawn_expiry_limit() -> Result<()> {
+        let base = temp("once-edges");
+        let file = base.join("f.bin");
+        sample(&file, 20_000);
+        let a = Node::start(&base.join("a")).await?;
+        let b = Node::start(&base.join("b")).await?;
+
+        let (id, t) = once_share(&a, &file).await?;
+        let err = format!("{:#}", a.resolve(&Link::Once(t.clone())).await.unwrap_err());
+        assert!(err.contains("собственная"), "own link: {err}");
+
+        let old = a.shares.lock().await.iter().find(|r| r.id == id).cloned().expect("record");
+        a.renew_once(&id).await?;
+        let new_ep = a.once.endpoint(&id).expect("renewed endpoint").id();
+        assert_ne!(new_ep, t.addr.id, "new link, new endpoint");
+        a.once.spawn(&old).await?; // late start_all with the old record
+        assert_eq!(a.once.endpoint(&id).expect("still up").id(), new_ep, "stale spawn must not replace the new link");
+
+        let rec = a.shares.lock().await.iter().find(|r| r.id == id).cloned().expect("record");
+        let token = data_encoding::HEXLOWER.decode(rec.once.as_ref().unwrap().token.as_ref().unwrap().as_bytes())?;
+        let nt = OnceTicket { addr: local_addr(&a.once.endpoint(&id).unwrap()), token: token.try_into().unwrap() };
+        b.resolve(&Link::Once(nt)).await?; // the new link works
+
+        a.stop_share(&id).await?;
+        a.once.spawn(&rec).await?; // late spawn after stop
+        assert!(a.once.endpoint(&id).is_none(), "no zombie endpoint after stop");
+
+        // expired but not yet swept
+        let (id2, t2) = once_share(&a, &file).await?;
+        if let Some(r) = a.shares.lock().await.iter_mut().find(|r| r.id == id2) {
+            r.created = 0;
+        }
+        let err = format!("{:#}", b.resolve(&Link::Once(t2)).await.unwrap_err());
+        assert!(err.contains("больше не действует"), "expired: {err}");
+        a.stop_share(&id2).await?;
+
+        // limit
+        for i in 0..once::MAX_LIVE {
+            let f = base.join(format!("l{i}.bin"));
+            sample(&f, 1000 + i);
+            a.share(&f, true, |_, _| {}).await?;
+        }
+        let f = base.join("over.bin");
+        sample(&f, 999);
+        let err = format!("{:#}", a.share(&f, true, |_, _| {}).await.unwrap_err());
+        assert!(err.contains("не больше"), "11th link: {err}");
+
+        for n in [a, b] {
+            n.shutdown().await;
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn once_link_concurrent_claims_one_winner() -> Result<()> {
+        let base = temp("once-race");
+        let file = base.join("f.bin");
+        sample(&file, 10_000);
+        let a = Node::start(&base.join("a")).await?;
+        let b = Node::start(&base.join("b")).await?;
+        let c = Node::start(&base.join("c")).await?;
+        let (_id, t) = once_share(&a, &file).await?;
+        let (lb, lc) = (Link::Once(t.clone()), Link::Once(t));
+        let (rb, rc) = tokio::join!(b.resolve(&lb), c.resolve(&lc));
+        assert_eq!(rb.is_ok() as u8 + rc.is_ok() as u8, 1, "exactly one claim wins");
+        for n in [a, b, c] {
+            n.shutdown().await;
+        }
+        let _ = std::fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    /// Restart of the sender while claimed: the binding is still there (only B), B resumes; a public share of the
+    /// same file is independent of the one-time one (stopping it does not touch the one-time record).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn once_link_survives_sender_restart_and_public_share() -> Result<()> {
+        let base = temp("once-restart");
+        let file = base.join("f.bin");
+        let data = sample(&file, 800_000);
+        let a = Node::start(&base.join("a")).await?;
+        let b = Node::start(&base.join("b")).await?;
+        let c = Node::start(&base.join("c")).await?;
+        let (id, t) = once_share(&a, &file).await?;
+        eprintln!("restart: endpoint before public share: {:?}", a.once.endpoint(&id).map(|e| e.id()));
+        let public = a.share(&file, false, |_, _| {}).await?;
+        assert_ne!(public.id, id);
+        eprintln!("restart: endpoint after public share: {:?} state {}", a.once.endpoint(&id).map(|e| e.id()), once_state(&a, &id).await);
+        let r = b.resolve(&Link::Once(t.clone())).await;
+        eprintln!("restart: first claim {:?}", r.as_ref().err().map(|e| format!("{e:#}")));
+        r?;
+        a.stop_share(&public.id).await?;
+        assert_eq!(once_state(&a, &id).await, "claimed", "stopping the public share keeps the one-time one");
+        // a new public share of another file must not overwrite the binding
+        let other = base.join("other.bin");
+        sample(&other, 1000);
+        a.share(&other, false, |_, _| {}).await?;
+
+        a.shutdown().await;
+        drop(a);
+        let a = Node::start(&base.join("a")).await?;
+        let mut ep = None;
+        for _ in 0..50 {
+            ep = a.once.endpoint(&id);
+            if ep.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let t2 = OnceTicket { addr: local_addr(&ep.expect("endpoint back after restart")), token: t.token };
+        assert_eq!(t2.addr.id, t.addr.id, "same throwaway id after restart");
+        let l2 = Link::Once(t2);
+        let t0 = std::time::Instant::now();
+        let rb = b.resolve(&l2).await;
+        eprintln!("restart: B {:?} in {:?}", rb.as_ref().err().map(|e| format!("{e:#}")), t0.elapsed());
+        let ticket = rb?;
+        let rc = c.resolve(&l2).await;
+        eprintln!("restart: C {:?}", rc.as_ref().err().map(|e| format!("{e:#}")));
+        assert!(rc.is_err(), "binding survived the restart");
+        let dest = base.join("dest");
+        std::fs::create_dir_all(&dest)?;
+        let (_k, never) = watch::channel(false);
+        let out = b.download(&ticket, &l2.record_id(), &dest, never, |_| {}).await?;
+        assert_eq!(std::fs::read(&out)?, data);
+        for n in [a, b, c] {
+            n.shutdown().await;
+        }
+        let _ = std::fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    #[test]
+    fn links_parse_both_kinds() {
+        let t = OnceTicket { addr: iroh::EndpointAddr::new(SecretKey::generate().public()), token: [7u8; 32] };
+        let s = format!("{SCHEME}{}", t.encode());
+        let l = parse_link(&s).unwrap();
+        assert_eq!(l.once().unwrap().token, [7u8; 32]);
+        assert!(l.name().is_none() && l.size().is_none());
+        assert!(l.record_id().starts_with("once-") && l.record_id().len() == 21);
+        let bt = BlobTicket::new(t.addr.clone(), Hash::new(b"x"), BlobFormat::HashSeq);
+        let l = parse_link(&format!("{SCHEME}{bt}?size=5&name=a%20b")).unwrap();
+        assert_eq!((l.size(), l.name().as_deref()), (Some(5), Some("a b")));
+        assert_eq!(l.record_id(), Hash::new(b"x").to_string());
+    }
+
 }

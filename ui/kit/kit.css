@@ -61,6 +61,16 @@ body { margin: 0; font: var(--f-13)/1.45 var(--font); background: var(--c-bg); c
 .tk-row__actions { display: flex; gap: var(--s-1); flex: none; }
 .tk-row__actions:empty { display: none; }
 
+/* Switch: on/off for a mode; label right after it */
+.tk-switch { display: inline-flex; align-items: center; gap: var(--s-4); align-self: flex-start; cursor: pointer; user-select: none; }
+.tk-switch__input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tk-switch__track { position: relative; flex: none; width: var(--w-switch); height: var(--h-switch); border-radius: var(--r-pill); background: var(--c-fill); transition: background var(--t-fast); }
+.tk-switch__track::after { content: ""; position: absolute; top: var(--s-1); left: var(--s-1); width: calc(var(--h-switch) - 2 * var(--s-1)); height: calc(var(--h-switch) - 2 * var(--s-1)); border-radius: var(--r-pill); background: var(--c-surface); transition: transform var(--t-fast); }
+.tk-switch__input:checked + .tk-switch__track { background: var(--c-acc); }
+.tk-switch__input:checked + .tk-switch__track::after { transform: translateX(calc(var(--w-switch) - var(--h-switch))); }
+.tk-switch__input:focus-visible + .tk-switch__track { outline: var(--line-w) solid var(--c-acc); outline-offset: var(--s-1); }
+@media (prefers-reduced-motion: reduce) { .tk-switch__track, .tk-switch__track::after { transition: none; } }
+
 /* Tabs (segmented) */
 .tk-tabs { display: flex; padding: var(--s-1); gap: var(--s-1); background: var(--c-field); border-radius: var(--r-2); }
 .tk-tab { flex: 1; height: calc(var(--h-control) - var(--s-2)); border: 0; border-radius: var(--r-1); background: transparent; color: var(--c-dim); font: inherit; cursor: pointer; }

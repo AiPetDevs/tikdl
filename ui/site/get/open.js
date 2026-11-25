@@ -9,7 +9,7 @@
   if (/\.github\.io$/.test(location.hostname) && repo) {
     document.getElementById('get').href = 'https://github.com/' + location.hostname.split('.')[0] + '/' + repo + '/releases/latest';
   }
-  if (!/^blob[a-z0-9]+/i.test(rest)) {
+  if (!/^(blob|once)[a-z0-9]+/i.test(rest)) {
     state.textContent = 'В ссылке нет тикета TikDL — попросите прислать её ещё раз.';
     open.classList.add('pg__hidden');
     return;

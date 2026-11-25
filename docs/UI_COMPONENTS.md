@@ -6,7 +6,7 @@
 | Компонент | Файл | Что это | Параметры / состояния |
 |---|---|---|---|
 | h, show | `kit/dom.js` | единственный построитель элементов кита; скрыть/показать классом | — |
-| Icon | `kit/icons.js` | значки 16×16 цветом текста | pause play x reveal copy check down up |
+| Icon | `kit/icons.js` | значки 16×16 цветом текста | pause play x reveal copy check down up renew (новая ссылка) |
 | Button | `kit/Button.js` | текстовая кнопка | variant primary/plain, wide |
 | IconButton | `kit/IconButton.js` | действие значком на строке | arm (разрушительное: второе нажатие), doneIcon (copy → check) |
 | StatusChip | `kit/StatusChip.js` | состояние одним словом справа от имени | tone dim/warn/ok/bad, hint |
@@ -15,9 +15,10 @@
 | FileList | `kit/FileList.js` | состав передачи: имя слева, размер справа; «и ещё N» | files [{name,size}], more |
 | DropOverlay | `kit/DropOverlay.js` | подсказка поверх окна, пока над ним тащат файлы | text; set(on) |
 | Tabs | `kit/Tabs.js` | переключатель разделов | items, value, onChange |
+| Switch | `kit/Switch.js` | вкл/выкл режима для следующего действия («Одноразовая ссылка»); подпись сразу за переключателем, пояснение — подсказкой | label, hint, value, onChange |
 | TextField, TextArea, PathField | `kit/Field.js` | поля ввода; путь только для чтения с выбором папки | readonly, placeholder |
 | Page, Stack, Line, Panel, Text, retone | `kit/Layout.js` | раскладка и текст | Panel accent; Text dim/bad/strong/empty |
 | Showcase | `kit/showcase.js` | витрина всех компонентов во всех состояниях | `#/kit` |
 
-Экраны: `screens/get.js` (GetScreen: подтверждение входящей ссылки, форма, загрузки), `screens/share.js` (ShareScreen: выбор, раздачи).
+Экраны: `screens/get.js` (GetScreen: подтверждение входящей ссылки, форма, загрузки), `screens/share.js` (ShareScreen: выбор, переключатель «Одноразовая ссылка», раздачи; у одноразовой — ждёт · закреплена · получено · срок истёк).
 Данные: `state.js` (downloadView, shareView, preparingView — что показывает строка; действия), `api.js` (Tauri; в браузере — `api.mock.js`).
