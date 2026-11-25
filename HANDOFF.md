@@ -1,9 +1,10 @@
 # HANDOFF — TikDL
 
-## State (2026-11-25)
-Version 0.1.0, last code commit `51e6b5f`. Built app: `src-tauri/target/release/bundle/macos/TikDL.app` (matches code).
-Done in this session: audit (`docs/AUDIT_2026-11-23.md`), P0 and P1 fixes, UI rebuilt by ui-architect (bar like the
-owner's TransferBar sample), owner remark R3 (bar moves for links without size), weak points batch (owner asks A5–A10).
+## State (2026-11-25, evening)
+Version 0.1.0 released: https://github.com/AiPetDevs/tikdl/releases/tag/v0.1.0 (dmg, exe, apk, deb, AppImage).
+Repo is PUBLIC (AiPetDevs/tikdl); history was rewritten to remove owner data (old history: `../_RESULTS/tikdl-before-scrub.bundle`,
+private; removed Mac evidence: `../_RESULTS/private_evidence/`). Android version works (see «Android» below).
+Earlier: audit, P0/P1 fixes, UI by ui-architect, forbidden system folders, one-time links.
 
 ## Verified (live, on the .app)
 - Free-space check refuses before writing (150 MB disk image vs 400 MB file).
@@ -38,13 +39,22 @@ owner's TransferBar sample), owner remark R3 (bar moves for links without size),
   switch, rows and live stages were checked with a share created by the CLI in a test profile).
 
 ## Next step (exact)
-dmg built 2026-11-24: `../_RESULTS/TikDL_0.1.0_universal.dmg` (universal, ad-hoc signed). Next: owner installs it; for wider sharing — Apple Developer
-certificate (signing + notarization). Build: `cd src-tauri && cargo tauri build --target universal-apple-darwin`.
+1. Install the release APK on a real Android phone; run «Android: transfer both ways» from `docs/plans/ACCEPT.md`
+   (phone→Mac on the release build was not re-checked: release WebView is not inspectable, link could not be read).
+2. Run the Windows exe on a real Windows PC (built by CI, never launched).
+3. Android gaps: folder sharing, delete imported copies on stop, ask notification permission (Android 13+).
+New release: bump version in `tauri.conf.json` + `Cargo.toml`, push tag `vX.Y.Z` (CI makes the release), then
+`gh release upload vX.Y.Z <apk>` (CI does not build Android).
 
 ## Open owner asks
 None from this session (A5–A10, A13, A14 closed).
 
 ## Traps
+- PUBLIC repo: never commit owner data. Commit only as `git -c user.name=TikDL -c user.email=tikdl@localhost`;
+  `accept.py` writes absolute local paths into ACCEPT.md — replace with `<project>` before committing; no Mac
+  screenshots of the desktop/menu bar, no logs with `/Users/...`. Check: `git grep -nE '/Users/|/Volumes/'`.
+- Android signing key `~/.tikdl-android/` is not in the repo; without it an update cannot install over the old app.
+- Release WebView is not debuggable (no CDP): test JS-side things on the debug APK.
 - Do NOT export downloads with `ExportMode::TryReference`: the store keeps an `External` entry pointing at the moved
   file; it cannot be deleted (delete/GC are crate-private) and the next download of the same data fails with
   `Error::Io`. Use the default Copy (reflink on APFS). Details: `docs/IDEAS_LEDGER.md`.

@@ -31,6 +31,7 @@ same change; then `node scripts/passport.mjs build && node scripts/passport.mjs 
 Never edit `passport/generated/` or `passport/view.html`.
 
 ## Rules
+- The repo is public: no owner data in files, logs, screenshots or commit authors (see HANDOFF «Traps»).
 - Interface: ui-architect. `ui-check.json` and `ui-check.baseline.json` change only by the owner.
 - "Done" = owner scenario in `docs/plans/ACCEPT.md` run on the rebuilt `.app` after the last edit (`accept.py`).
 - Owner remarks on UI → `docs/UI_REMARKS.md`, fixed as a class.
