@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Скачивание и раздача файлов по iroh-тикету"
 
+[lib]
+name = "tikdl_lib"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [[bin]]
 name = "tikdl"
 path = "src/main.rs"
@@ -27,7 +32,6 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 fs4 = "0.13"
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tokio = { version = "1", features = ["full"] }
 urlencoding = "2"
 walkdir = "2"
@@ -36,3 +40,6 @@ walkdir = "2"
 opt-level = 3
 lto = "thin"
 strip = true
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

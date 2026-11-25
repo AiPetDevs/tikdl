@@ -55,3 +55,13 @@ None from this session (A5–A10, A13, A14 closed).
 - Launch the app with `open` (not the binary directly), otherwise its window may land on another Space and ignore clicks.
 - The CLI and the app share one data folder: do not run both on the same profile; use `HOME=<dir>` for the CLI.
 - Landing page navigates to `tikdl://`; in Playwright use `waitUntil: 'commit'`.
+
+## Android (2026-11-25, started)
+- Code split: `src-tauri/src/lib.rs` (app, `run()` = mobile entry) + `main.rs` (desktop: CLI, then `run()`).
+  Tray, single-instance, CLI, hide-on-close are `#[cfg(desktop)]`. Android project: `src-tauri/gen/android`.
+- Build: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME=~/Library/Android/sdk
+  NDK_HOME=~/Library/Android/sdk/ndk/28.2.13676358 cargo tauri android build --apk --target aarch64 --debug`.
+- Verified: debug APK installs and opens on emulator `Medium_Phone_API_37.0` (`docs/plans/evidence/android_first_launch.png`).
+- Not done: download folder shows "." (no `dirs::download_dir` on Android); tabs under status bar (safe-area);
+  file picker returns `content://` URIs; background sharing needs a foreground service; `tikdl://` and https links;
+  no real transfer tested; APK 454 MB debug (release + strip needed).
