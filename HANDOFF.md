@@ -69,6 +69,9 @@ None from this session (A5–A10, A13, A14 closed).
 - Verified on emulator `Medium_Phone_API_37.0`: tikdl:// link opens confirm (`evidence/android_link_confirm.png`),
   Mac→phone 30 MB sha1 match; phone→Mac via system picker 12 MB sha1 match (`evidence/android_sharing.png`),
   also after Back (app in background); history restored after restart.
-- Not done: release APK (signing key, size; debug is 454 MB), folder sharing (Android picker gives files only),
+- Release APK: `cargo tauri android build --apk --target aarch64` (same env) → 26 MB, signed with key from
+  `~/.tikdl-android/keystore.properties` (outside repo; losing it = updates need reinstall). Copy in `../_RESULTS/`.
+  R8 keep rule for JNI-called `ShareService.setActive` in `proguard-rules.pro`.
+- Not done: folder sharing (Android picker gives files only),
   imported copies use extra space and are not deleted on stop, https links open the landing page (scheme then
   opens app), notification permission prompt on Android 13+ not asked explicitly, not tested on a real phone.

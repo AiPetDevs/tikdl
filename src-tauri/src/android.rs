@@ -19,7 +19,7 @@ fn with_env<T>(f: impl FnOnce(&mut JNIEnv, &JObject) -> Result<T>) -> Result<T> 
     if env.exception_check().unwrap_or(false) {
         let _ = env.exception_describe();
         let _ = env.exception_clear();
-        return Err(anyhow!("ошибка Android при работе с файлом"));
+        return Err(anyhow!("ошибка Android (подробности в журнале)"));
     }
     r
 }

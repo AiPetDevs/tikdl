@@ -172,3 +172,10 @@ Owner remarks R1, R2 (`docs/UI_REMARKS.md`). "Done" only after each line was run
 | Intel Mac, another Mac (Gatekeeper prompt) | NOT checked: no such machine here |
 Output: `../_RESULTS/TikDL_0.1.0_universal.dmg`.
 - run: 2026-11-24T14:54:20-05:00 · result: ok · evidence: <project>/docs/plans/evidence/dmg_app_download.jpg (mtime 2026-11-24T14:54:03-05:00) · note: dmg собран (universal, 20.8 МБ, verify VALID), в нём TikDL + Applications; приложение из dmg скачало 50 МБ, файл совпадает. Не проверено: ссылка tikdl:// для копии из dmg (копия во временной папке), Intel-Mac и предупреждение Gatekeeper на другом Mac
+
+## 2026-11-25 13:17 · Android: transfer both ways on the phone
+- written: 2026-11-25T13:17:48-05:00
+- where: Android emulator Medium_Phone_API_37.0, debug APK installed
+- data: 30 MB file shared from Mac CLI; 12 MB file picked in Android file picker
+- expect: tikdl:// link opens 'Скачать?'; file lands in Download with same sha1; phone share downloads on Mac with same sha1, also after Back
+- run: 2026-11-25T13:17:48-05:00 · result: ok · evidence: <project>/docs/plans/evidence/android_sharing.png (mtime 2026-11-25T13:17:09-05:00)

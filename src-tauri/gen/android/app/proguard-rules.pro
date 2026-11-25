@@ -19,3 +19,5 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Called from Rust over JNI (src-tauri/src/android.rs): keep name and method.
+-keep class app.tikdl.desktop.ShareService { public static void setActive(android.content.Context, boolean); }
