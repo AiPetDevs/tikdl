@@ -1,0 +1,128 @@
+{
+ "id": "feature.share-once",
+ "name": "Раздать одноразовой ссылкой",
+ "user": "Включить «Одноразовая ссылка» и выбрать файл. Ссылку откроет одно устройство; строка сама проходит «одноразовая · ждёт» → «закреплена» (код устройства) → «получено … — ссылка сгорела». Незакреплённая живёт 3 дня, закреплённая — 7 дней без активности.",
+ "trigger": "Переключатель «Одноразовая ссылка» + выбор файлов",
+ "input": "пути",
+ "output": "одноразовая ссылка без имени, размера, ключа узла и IP",
+ "steps": [
+  {
+   "comp": "ui.screens",
+   "does": "переключатель",
+   "at": [
+    "ui/screens/share.js#ShareScreen"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "флаг once; строки по этапам",
+   "at": [
+    "ui/state.js#setOnce",
+    "ui/state.js#shareView"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "share_path(path, once=true)",
+   "at": [
+    "ui/api.js#api.sharePath"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "раздача с флагом once",
+   "at": [
+    "src-tauri/src/lib.rs#share_path"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "подсчёт как у обычной раздачи; запись с ключом и токеном",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "не больше 10; временный узел со своим ключом; ссылка только когда есть relay",
+   "at": [
+    "src-tauri/src/core.rs#once_room",
+    "src-tauri/src/once.rs#Host::spawn",
+    "src-tauri/src/once.rs#Host::addr",
+    "src-tauri/src/once.rs#OnceTicket::encode"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "получатель закрепляет (запись до ответа), шлюз отдаёт только ему, «получено» → сгорела, узел выключен",
+   "at": [
+    "src-tauri/src/once.rs#Claim",
+    "src-tauri/src/once.rs#Gate",
+    "src-tauri/src/once.rs#Host::handle",
+    "src-tauri/src/once.rs#Host::burned"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "срок: проверка на каждом запросе и раз в минуту",
+   "at": [
+    "src-tauri/src/once.rs#Host::sweep",
+    "src-tauri/src/once.rs#OnceRec::live"
+   ]
+  },
+  {
+   "comp": "app.shell",
+   "does": "смена этапа → событие shares-changed",
+   "at": [
+    "src-tauri/src/lib.rs#run"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "api.on('shares-changed'), list_shares",
+   "at": [
+    "ui/api.js#api.on",
+    "ui/api.js#api.listShares"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "обновить строку",
+   "at": [
+    "ui/state.js#refreshShares"
+   ]
+  }
+ ],
+ "reads": "исходные файлы",
+ "writes": "store/, shares.json (ключ, хеш токена, устройство, этап)",
+ "errors": [
+  {
+   "when": "уже 10 живых",
+   "shows": "«одновременно может действовать не больше 10 одноразовых ссылок — остановите ненужные»",
+   "at": [
+    "src-tauri/src/core.rs#once_room"
+   ]
+  },
+  {
+   "when": "нет связи с relay",
+   "shows": "строка «подключение к сети…» без ссылки (CLI: «ссылки пока нет: нет связи с relay — она появится здесь, когда связь будет»)",
+   "at": [
+    "src-tauri/src/once.rs#Host::addr"
+   ]
+  },
+  {
+   "when": "временный узел не поднялся",
+   "shows": "«одноразовая ссылка … не поднялась: …» в журнале",
+   "at": [
+    "src-tauri/src/once.rs#Host::start_all"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#once_link_one_device_then_burned",
+  "src-tauri/src/core.rs#once_link_concurrent_claims_one_winner",
+  "src-tauri/src/core.rs#once_link_survives_sender_restart_and_public_share",
+  "src-tauri/src/core.rs#once_link_renew_stale_spawn_expiry_limit"
+ ],
+ "verify": "cargo test once_; живой прогон docs/ONCE_LINKS.md §6 (файл 1,5 ГБ, обрыв, перезапуск, второе устройство)"
+}

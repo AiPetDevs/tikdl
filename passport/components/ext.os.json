@@ -1,0 +1,13 @@
+{
+ "id": "ext.os",
+ "name": "Система",
+ "kind": "ОС",
+ "layer": "ext",
+ "purpose": "Уведомления, строка меню, диалоги выбора файлов, регистрация tikdl://, «Показать в Finder»; на Android — ContentResolver и служба переднего плана.",
+ "not": "Решений не принимает; вызывают app.shell, app.android и ui.api через плагины Tauri.",
+ "code": [],
+ "uses": [],
+ "observe": "Системные настройки уведомлений.",
+ "verify": "Сценарии окна в ACCEPT.md",
+ "isolate": "—"
+}

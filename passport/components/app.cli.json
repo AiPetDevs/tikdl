@@ -1,0 +1,60 @@
+{
+ "id": "app.cli",
+ "name": "Консольная программа",
+ "kind": "CLI",
+ "layer": "app",
+ "purpose": "tikdl get <ссылка> <папка> | serve [--once] [путь ...] | shares | stop <id>: те же функции ядра без окна; serve печатает ссылку и каждую смену этапа одноразовой ссылки.",
+ "not": "Не ведёт реестр загрузок окна (downloads.json) — это app.state; передачу выполняет ядро.",
+ "symbols": [
+  "src-tauri/src/lib.rs#once_stage",
+  "src-tauri/src/lib.rs#print_share",
+  "src-tauri/src/lib.rs#cli",
+  "src-tauri/src/lib.rs#cli_inner",
+  "src-tauri/src/lib.rs#USAGE",
+  "src-tauri/src/lib.rs#cli_main"
+ ],
+ "uses": [
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "Node::start, shutdown, wait_online"
+  },
+  {
+   "to": "core.share",
+   "how": "вызов",
+   "what": "share, list_shares, stop_share"
+  },
+  {
+   "to": "core.download",
+   "how": "вызов",
+   "what": "peek, download"
+  },
+  {
+   "to": "core.links",
+   "how": "вызов",
+   "what": "parse_link"
+  },
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "resolve, once_done, watch_once"
+  }
+ ],
+ "observe": "Печать в терминал; код выхода 1 при ошибке («Ошибка: …»).",
+ "verify": "HOME=<scratch>/a tikdl serve <файл>; HOME=<scratch>/b tikdl get <ссылка> <папка>",
+ "invariants": [
+  "Не запускать на настоящем профиле при проверках: HOME=<отдельная папка>."
+ ],
+ "failures": [
+  {
+   "symptom": "«хранилище TikDL уже открыто другим запуском …»",
+   "cause": "окно или другая консольная команда держит ту же папку данных",
+   "look": "закрыть окно или задать другой HOME",
+   "refs": [
+    "src-tauri/src/core.rs#STORE_BUSY"
+   ]
+  }
+ ],
+ "isolate": "Сам по себе: два терминала с разными HOME.",
+ "code": []
+}

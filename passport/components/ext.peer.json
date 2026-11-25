@@ -1,0 +1,13 @@
+{
+ "id": "ext.peer",
+ "name": "Другой TikDL",
+ "kind": "внешний узел",
+ "layer": "ext",
+ "purpose": "Компьютер раздающего или получающего: отвечает на запросы блобов и на протокол tikdl/once/1.",
+ "not": "Это не наш процесс: его состояние видно только по ответам; наша сторона — core.download и core.once.",
+ "code": [],
+ "uses": [],
+ "observe": "У него: tikdl shares.",
+ "verify": "Два профиля HOME на одном компьютере",
+ "isolate": "HOME=A serve / HOME=B get."
+}

@@ -1,0 +1,47 @@
+# Passport check 2026-11-25
+Индекс: файлов 40, символов 428, вызовов 697, код 201ba7b0b0e672dc, коммит 4ab9f9d
+
+passport:check — зелёный (предупреждений: 0).
+
+$ node scripts/passport.mjs where feature.receive-once
+feature.receive-once — Получить по одноразовой ссылке
+  Открыть одноразовую ссылку и нажать «Скачать»: компьютер закрепляет её за собой и скачивает; можно прерваться и докачать. Когда всё в папке, отправитель узнаёт «получено», и ссылка сгорает для всех.
+  запуск: «Скачать» или «Что внутри?» в карточке одноразовой ссылки; tikdl get <once-ссылка> <папка>
+  карточка: passport/features/receive-once.json
+  1. [app.commands] проверка «уже получено на этом компьютере»
+     src-tauri/src/lib.rs:157 already_received, src-tauri/src/lib.rs:271 start_download
+  2. [app.jobs] задача загрузки
+     src-tauri/src/lib.rs:311 spawn_job
+  3. [core.once] claim: закрепить; получить корень и адрес временного узла
+     src-tauri/src/core.rs:842 Node::resolve, src-tauri/src/once.rs:453 request, src-tauri/src/once.rs:483 claim, src-tauri/src/once.rs:471 status
+  4. [core.download] обычная загрузка с временного узла под тегом dl-once-…
+     src-tauri/src/core.rs:725 Node::download
+  5. [app.jobs] done + ack_pending до снятия тега; «получено» отправителю (5 попыток, потом при запуске)
+     src-tauri/src/lib.rs:461 send_done
+  6. [core.once] запрос done
+     src-tauri/src/core.rs:857 Node::once_done, src-tauri/src/once.rs:491 done
+
+$ node scripts/passport.mjs impact src-tauri/src/core.rs#Node::check_space
+src-tauri/src/core.rs#Node::check_space  (src-tauri/src/core.rs:684–719) fn
+  компонент: core.download; функции: feature.download
+  глубина 1: src-tauri/src/lib.rs#peek_link (src-tauri/src/lib.rs:180) [app.commands]
+  глубина 1: src-tauri/src/lib.rs#spawn_job (src-tauri/src/lib.rs:311) [app.jobs]
+  глубина 2: ui/api.js#api.peekLink (ui/api.js:17) [ui.api]
+  глубина 2: src-tauri/src/lib.rs#start_download (src-tauri/src/lib.rs:271) [app.commands]
+  глубина 2: src-tauri/src/lib.rs#run (src-tauri/src/lib.rs:746) [app.shell]
+  глубина 3: ui/state.js#peekConfirm (ui/state.js:126) [ui.state]
+  глубина 3: ui/api.js#api.startDownload (ui/api.js:21) [ui.api]
+  глубина 4: ui/state.js#run (ui/state.js:82) [ui.state]
+  глубина 5: ui/state.js#startDownload (ui/state.js:87) [ui.state]
+  глубина 5: ui/state.js#actions.resume (ui/state.js:98) [ui.state]
+  глубина 6: ui/screens/get.js#GetScreen (ui/screens/get.js:21) [ui.screens]
+  глубина 6: ui/state.js#answerConfirm (ui/state.js:145) [ui.state]
+  тесты, которые его проходят: не найдены — проверять сценарием
+  затронуты компоненты: app.commands, app.jobs, ui.api, app.shell, ui.state, ui.screens, core.download
+  затронуты функции: feature.download, feature.peek, feature.pause-resume, feature.receive-once, feature.startup, feature.incoming-link, feature.share-once
+  связи найдены по именам (approx): перед большой правкой перепроверьте поиском по коду
+
+components: 30, features: 13
+Индекс: файлов 40, символов 428, вызовов 697, код db0579413ee41780, коммит 4ab9f9d
+
+passport:check — зелёный (предупреждений: 0).

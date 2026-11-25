@@ -1,0 +1,103 @@
+{
+ "id": "feature.incoming-link",
+ "name": "Открыть ссылку из мессенджера",
+ "user": "Нажать ссылку в чате: открывается TikDL и показывает карточку «что пришло» с кнопками «Что внутри?», «Скачать», «Отклонить». Без нажатия ничего не скачивается.",
+ "trigger": "Щелчок по https-ссылке страницы-прокладки или по tikdl://get/…",
+ "input": "ссылка",
+ "output": "карточка подтверждения на вкладке «Скачать»",
+ "steps": [
+  {
+   "comp": "ui.site",
+   "does": "страница берёт тикет после «#» и открывает tikdl://get/<тикет>",
+   "at": [
+    "ui/site/get/open.js"
+   ]
+  },
+  {
+   "comp": "app.shell",
+   "does": "deep link → очередь входящих ссылок, событие links-pending, окно на передний план",
+   "at": [
+    "src-tauri/src/lib.rs#run",
+    "src-tauri/src/lib.rs#show_main"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "событие links-pending; забрать ссылки",
+   "at": [
+    "ui/api.js#api.on",
+    "ui/api.js#api.takePendingLinks"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "отдать накопленные ссылки окну",
+   "at": [
+    "src-tauri/src/lib.rs#take_pending_links"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "очередь; разбор ссылки; карточка (для одноразовой — «Имя и размер скрыты…»)",
+   "at": [
+    "ui/state.js#pullLinks",
+    "ui/state.js#nextLink"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "inspect_link",
+   "at": [
+    "ui/api.js#api.inspectLink"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "разбор и проверка «уже получено»",
+   "at": [
+    "src-tauri/src/lib.rs#inspect_link",
+    "src-tauri/src/lib.rs#already_received"
+   ]
+  },
+  {
+   "comp": "ui.screens",
+   "does": "карточка подтверждения",
+   "at": [
+    "ui/screens/get.js#GetScreen"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "«Скачать» → скачивание; «Отклонить» → следующая ссылка",
+   "at": [
+    "ui/state.js#answerConfirm"
+   ]
+  }
+ ],
+ "reads": "очередь ссылок в памяти",
+ "writes": "ничего до «Скачать»",
+ "errors": [
+  {
+   "when": "ссылка не разбирается",
+   "shows": "«неверный тикет» под полем, карточка не показывается",
+   "at": [
+    "src-tauri/src/core.rs#parse_link"
+   ]
+  },
+  {
+   "when": "одноразовая ссылка уже получена этим компьютером",
+   "shows": "«уже получено на этом компьютере — одноразовая ссылка сгорела»",
+   "at": [
+    "src-tauri/src/lib.rs#already_received"
+   ]
+  },
+  {
+   "when": "отправитель открыл свою одноразовую ссылку",
+   "shows": "«это ваша собственная одноразовая ссылка — откройте её на том устройстве, которому она предназначена»",
+   "at": [
+    "src-tauri/src/core.rs#Node::resolve"
+   ]
+  }
+ ],
+ "verify": "docs/plans/ACCEPT.md: «Deep link»; open 'tikdl://get/…' при запущенном и закрытом приложении"
+}

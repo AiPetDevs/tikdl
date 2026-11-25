@@ -1,0 +1,104 @@
+{
+ "items": [
+  {
+   "id": "TIKDL_GC_SECS",
+   "kind": "переменная среды",
+   "default": "15",
+   "effect": "как часто сборщик освобождает данные без тега в хранилищах",
+   "at": [
+    "src-tauri/src/core.rs#gc_interval"
+   ],
+   "who": "core.node"
+  },
+  {
+   "id": "TIKDL_LINK_BASE",
+   "kind": "переменная сборки (option_env!)",
+   "default": "не задана → https-ссылки нет",
+   "effect": "адрес страницы-прокладки: https-ссылка для мессенджеров",
+   "at": [
+    "src-tauri/src/core.rs#web_link"
+   ],
+   "who": "core.links; задаётся в .github/workflows/build.yml"
+  },
+  {
+   "id": "HOME / XDG_DATA_HOME / LOCALAPPDATA",
+   "kind": "переменная среды",
+   "default": "системная",
+   "effect": "где папка данных; отдельный HOME = отдельное «устройство» и профиль для проверок",
+   "at": [
+    "src-tauri/src/core.rs#data_dir"
+   ],
+   "who": "core.node"
+  },
+  {
+   "id": "WAIT_SECS",
+   "kind": "константа",
+   "default": "3 дня",
+   "effect": "сколько живёт незакреплённая одноразовая ссылка",
+   "at": [
+    "src-tauri/src/once.rs#WAIT_SECS"
+   ],
+   "who": "core.once"
+  },
+  {
+   "id": "IDLE_SECS",
+   "kind": "константа",
+   "default": "7 дней",
+   "effect": "сколько живёт закреплённая без активности",
+   "at": [
+    "src-tauri/src/once.rs#IDLE_SECS"
+   ],
+   "who": "core.once"
+  },
+  {
+   "id": "MAX_LIVE",
+   "kind": "константа",
+   "default": "10",
+   "effect": "сколько одноразовых ссылок может жить сразу (по сокету на каждую)",
+   "at": [
+    "src-tauri/src/once.rs#MAX_LIVE"
+   ],
+   "who": "core.once"
+  },
+  {
+   "id": "dest",
+   "kind": "выбор в окне",
+   "default": "~/Downloads (Android — папка загрузок приложения)",
+   "effect": "папка назначения загрузок",
+   "at": [
+    "src-tauri/src/lib.rs#default_download_dir"
+   ],
+   "who": "app.commands, ui.state"
+  },
+  {
+   "id": "once",
+   "kind": "переключатель в окне",
+   "default": "выключен",
+   "effect": "следующие раздачи — одноразовые",
+   "at": [
+    "ui/state.js#setOnce"
+   ],
+   "who": "ui.state"
+  },
+  {
+   "id": "tauri.conf.json",
+   "kind": "файл конфигурации",
+   "default": "—",
+   "effect": "окно, схема deep link tikdl, значки, сборка",
+   "at": [
+    "src-tauri/tauri.conf.json"
+   ],
+   "who": "Tauri"
+  },
+  {
+   "id": "ui-check.json",
+   "kind": "файл конфигурации",
+   "default": "—",
+   "effect": "ворота кода интерфейса (меняет только владелец)",
+   "at": [
+    "ui-check.json"
+   ],
+   "who": "delivery.checks"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "id": "app.android",
+ "name": "Android",
+ "kind": "платформа",
+ "layer": "app",
+ "purpose": "На Android выбранный файл приходит как content://, а раздавать нужно настоящий файл — он копируется в приватную папку imports/. Пока что-то раздаётся, служба переднего плана с уведомлением «Раздача» не даёт системе заморозить процесс.",
+ "not": "Не раздаёт сам — это core.share; на компьютере не используется (там app.shell).",
+ "code": [
+  "src-tauri/src/android.rs"
+ ],
+ "symbols": [
+  "src-tauri/src/lib.rs#IMPORTS_DIR",
+  "src-tauri/src/lib.rs#sync_service"
+ ],
+ "uses": [
+  {
+   "to": "core.share",
+   "how": "вызов",
+   "what": "list_shares — есть ли живые раздачи"
+  },
+  {
+   "to": "ext.os",
+   "how": "JNI",
+   "what": "ContentResolver, ShareService",
+   "static": false
+  }
+ ],
+ "observe": "adb logcat; уведомление «Раздача».",
+ "verify": "Сборка cargo tauri android build; на устройстве: раздать файл из выбора, свернуть, скачать с другого устройства",
+ "failures": [
+  {
+   "symptom": "«ошибка Android (подробности в журнале)»",
+   "cause": "исключение Java при вызове через JNI",
+   "look": "adb logcat",
+   "refs": [
+    "src-tauri/src/android.rs#with_env"
+   ]
+  },
+  {
+   "symptom": "«не удалось открыть …»",
+   "cause": "выбранный файл недоступен (облачный, без прав)",
+   "look": "adb logcat",
+   "refs": [
+    "src-tauri/src/android.rs#import_content"
+   ]
+  }
+ ],
+ "isolate": "Только на устройстве или эмуляторе Android."
+}

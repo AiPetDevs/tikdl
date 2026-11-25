@@ -1,0 +1,16 @@
+{
+ "id": "data.store",
+ "name": "Хранилища блобов",
+ "kind": "базы iroh-blobs",
+ "layer": "data",
+ "purpose": "store/ — раздачи (в сеть отдаётся только оно, по белому списку); downloads/ — загрузки до выкладки (к сети не подключено); теги share-* и dl-* защищают от сборщика мусора.",
+ "not": "Не место для пользовательских файлов: выкладку в папку делает core.download.",
+ "code": [],
+ "uses": [],
+ "observe": "du -sh store downloads в папке данных.",
+ "verify": "cargo test gc_frees_untagged_download",
+ "invariants": [
+  "Одно хранилище открывает один процесс (иначе STORE_BUSY)."
+ ],
+ "isolate": "HOME=<scratch>."
+}

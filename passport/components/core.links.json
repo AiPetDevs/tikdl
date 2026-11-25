@@ -1,0 +1,44 @@
+{
+ "id": "core.links",
+ "name": "Ссылки",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "Формат ссылки: tikdl://get/blob… (обычная: ключ узла + relay, ?size, ?name) и tikdl://get/once… (одноразовая); https-обёртка для мессенджеров (TIKDL_LINK_BASE); разбор любой из них и голого тикета.",
+ "not": "Не подключается к сети — это core.download и core.once; адрес узла даёт core.node.",
+ "symbols": [
+  "src-tauri/src/core.rs#SCHEME",
+  "src-tauri/src/core.rs#public_addr",
+  "src-tauri/src/core.rs#web_link",
+  "src-tauri/src/core.rs#make_link",
+  "src-tauri/src/core.rs#Link",
+  "src-tauri/src/core.rs#parse_link",
+  "src-tauri/src/core.rs#links_parse_both_kinds"
+ ],
+ "uses": [
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "OnceTicket::decode"
+  }
+ ],
+ "observe": "tikdl serve печатает обе формы ссылки.",
+ "verify": "cargo test links_parse_both_kinds",
+ "tests": [
+  "src-tauri/src/core.rs#links_parse_both_kinds"
+ ],
+ "invariants": [
+  "В ссылке нет IP раздающего: только ключ узла и relay (public_addr)."
+ ],
+ "failures": [
+  {
+   "symptom": "«неверный тикет» под полем ссылки",
+   "cause": "ссылка обрезана мессенджером или это не ссылка TikDL",
+   "look": "parse_link",
+   "refs": [
+    "src-tauri/src/core.rs#parse_link"
+   ]
+  }
+ ],
+ "isolate": "Чистые функции: cargo test links_parse_both_kinds.",
+ "code": []
+}

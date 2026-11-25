@@ -1,0 +1,124 @@
+{
+ "id": "core.share",
+ "name": "Раздача",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "Раздать файл или папку: проверить запрет, обойти папку (скрытое пропускается), посчитать и сохранить в store/, тег share-<id>, ссылка, запись в shares.json. Белый список хешей, которые основной узел отдаёт в сеть. Список, остановка, проверка «файлы изменились».",
+ "not": "Не отвечает за одноразовые ссылки — core.once; не проверяет пути сам — core.paths; ссылку собирает core.links.",
+ "symbols": [
+  "src-tauri/src/core.rs#SHARES_FILE",
+  "src-tauri/src/core.rs#SourceFile",
+  "src-tauri/src/core.rs#mtime_secs",
+  "src-tauri/src/core.rs#ShareRecord",
+  "src-tauri/src/core.rs#Shared",
+  "src-tauri/src/core.rs#Node::forbidden",
+  "src-tauri/src/core.rs#Node::forbidden_why",
+  "src-tauri/src/core.rs#Node::refresh_allow",
+  "src-tauri/src/core.rs#Node::list_shares",
+  "src-tauri/src/core.rs#Node::stop_share",
+  "src-tauri/src/core.rs#Node::share",
+  "src-tauri/src/core.rs#Node::view",
+  "src-tauri/src/core.rs#load_shares",
+  "src-tauri/src/core.rs#members",
+  "src-tauri/src/core.rs#save_shares",
+  "src-tauri/src/core.rs#local_addr",
+  "src-tauri/src/core.rs#temp",
+  "src-tauri/src/core.rs#sample"
+ ],
+ "uses": [
+  {
+   "to": "core.paths",
+   "how": "вызов",
+   "what": "forbidden_share, is_hidden_path, file_id, write_private"
+  },
+  {
+   "to": "core.links",
+   "how": "вызов",
+   "what": "make_link, web_link, public_addr"
+  },
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "Host::spawn, stop, once_room"
+  },
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "now_secs, endpoint"
+  },
+  {
+   "to": "data.shares",
+   "how": "чтение и запись",
+   "what": "shares.json",
+   "static": false
+  },
+  {
+   "to": "data.store",
+   "how": "запись",
+   "what": "store/, теги share-*",
+   "static": false
+  }
+ ],
+ "data": {
+  "reads": "исходные файлы, shares.json",
+  "writes": "store/ (копия-ссылка на файлы), shares.json (0600)"
+ },
+ "observe": "tikdl shares; вкладка «Раздать».",
+ "verify": "cd src-tauri && cargo test (share_and_download_between_two_nodes); docs/plans/ACCEPT.md: P0",
+ "invariants": [
+  "В сеть отдаются только хеши живых публичных раздач (allow); одноразовые основной узел не отдаёт.",
+  "Изменился исходный файл — раздача останавливается («файлы изменились»), а не отдаёт другое содержимое."
+ ],
+ "failures": [
+  {
+   "symptom": "«путь не найден: …»",
+   "cause": "файл перемещён или удалён",
+   "look": "путь в запросе",
+   "refs": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "symptom": "«в папке только скрытые и служебные файлы (…) — они не раздаются»",
+   "cause": "всё в папке скрытое",
+   "look": "Node::share, is_hidden_path",
+   "refs": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "symptom": "«в папке нет файлов»",
+   "cause": "пустая папка",
+   "look": "",
+   "refs": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "symptom": "«файл … подменили во время раздачи — раздайте заново»",
+   "cause": "файл изменился во время подсчёта",
+   "look": "SourceFile::unchanged",
+   "refs": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "symptom": "«НЕ раздаётся: исходные файлы изменились» (CLI) / ярлык в окне",
+   "cause": "исходник изменён после раздачи",
+   "look": "refresh_allow",
+   "refs": [
+    "src-tauri/src/core.rs#Node::refresh_allow"
+   ]
+  },
+  {
+   "symptom": "«… повреждён (…), список раздач начат заново»",
+   "cause": "shares.json испорчен",
+   "look": "shares.json в папке данных",
+   "refs": [
+    "src-tauri/src/core.rs#load_shares"
+   ]
+  }
+ ],
+ "isolate": "Тест в одном процессе или tikdl serve с HOME=<scratch>.",
+ "code": []
+}

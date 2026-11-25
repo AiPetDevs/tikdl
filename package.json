@@ -3,10 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node scripts/ui_check.mjs && eslint ui && node scripts/ui_smoke.mjs && cd src-tauri && cargo test",
+    "check": "node scripts/ui_check.mjs && eslint ui && node scripts/passport.mjs check && node scripts/ui_smoke.mjs && cd src-tauri && cargo test",
     "ui:check": "node scripts/ui_check.mjs",
     "ui:smoke": "node scripts/ui_smoke.mjs",
-    "lint": "eslint ui"
+    "lint": "eslint ui",
+    "passport": "node scripts/passport.mjs build",
+    "passport:check": "node scripts/passport.mjs check"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

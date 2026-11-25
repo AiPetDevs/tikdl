@@ -1,0 +1,66 @@
+{
+ "id": "feature.android-share",
+ "name": "Раздача на Android",
+ "user": "На телефоне выбрать файл и раздать: TikDL копирует его к себе и держит уведомление «Раздача», пока что-то раздаётся — так система не останавливает приложение.",
+ "trigger": "Вкладка «Раздать» на Android → системный выбор файла",
+ "input": "content://-адрес выбранного файла",
+ "output": "раздача как на компьютере; уведомление",
+ "steps": [
+  {
+   "comp": "ui.api",
+   "does": "системный выбор",
+   "at": [
+    "ui/api.js#api.pickPaths"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "content:// → файл в imports/",
+   "at": [
+    "src-tauri/src/lib.rs#share_path"
+   ]
+  },
+  {
+   "comp": "app.android",
+   "does": "имя и копия файла",
+   "at": [
+    "src-tauri/src/android.rs#import_content",
+    "src-tauri/src/android.rs#open_content"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "раздача",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "comp": "app.android",
+   "does": "включить службу переднего плана (ShareService.kt)",
+   "at": [
+    "src-tauri/src/lib.rs#sync_service",
+    "src-tauri/src/android.rs#set_sharing"
+   ]
+  }
+ ],
+ "reads": "выбранный файл",
+ "writes": "imports/, store/, shares.json",
+ "errors": [
+  {
+   "when": "исключение Java",
+   "shows": "«ошибка Android (подробности в журнале)»",
+   "at": [
+    "src-tauri/src/android.rs#with_env"
+   ]
+  },
+  {
+   "when": "файл не открывается",
+   "shows": "«не удалось открыть …»",
+   "at": [
+    "src-tauri/src/android.rs#import_content"
+   ]
+  }
+ ],
+ "verify": "cargo tauri android build; на устройстве: раздать, свернуть, скачать с компьютера"
+}

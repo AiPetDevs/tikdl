@@ -1,0 +1,73 @@
+{
+ "id": "app.jobs",
+ "name": "Задачи загрузки",
+ "kind": "модуль",
+ "layer": "app",
+ "purpose": "Одна задача на загрузку: подключение, узнать размер, проверить место, скачать, progress раз в 250 мс со скоростью за 5 с, итог в downloads.json. Для одноразовой ссылки — сообщить отправителю «получено» (5 попыток, потом при следующем запуске).",
+ "not": "Не знает, как устроены сеть и хранилище: это core.download и core.once.",
+ "symbols": [
+  "src-tauri/src/lib.rs#Progress",
+  "src-tauri/src/lib.rs#Speed",
+  "src-tauri/src/lib.rs#spawn_job",
+  "src-tauri/src/lib.rs#send_done"
+ ],
+ "uses": [
+  {
+   "to": "app.state",
+   "how": "вызов",
+   "what": "AppState::update"
+  },
+  {
+   "to": "core.links",
+   "how": "вызов",
+   "what": "Link::size, Link::name"
+  },
+  {
+   "to": "core.download",
+   "how": "вызов",
+   "what": "peek, check_space, download, forget_download"
+  },
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "resolve, once_done"
+  },
+  {
+   "to": "app.shell",
+   "how": "вызов",
+   "what": "notify_done"
+  },
+  {
+   "to": "ui.api",
+   "how": "событие",
+   "what": "progress"
+  }
+ ],
+ "observe": "Событие progress: {id, bytes, total, speed, state, message, name}; state: running | paused | done | error.",
+ "verify": "docs/plans/ACCEPT.md: P1-5, «Pause → quit → relaunch»; живой прогон одноразовой ссылки (docs/ONCE_LINKS.md §6)",
+ "invariants": [
+  "Итог решает сама задача: «пауза» не может прийти после «готово».",
+  "Одна задача на id: повторный старт не запускает вторую.",
+  "Одноразовая: done и ack_pending ставятся до снятия тега — выход в этот момент не перекачивает файл."
+ ],
+ "failures": [
+  {
+   "symptom": "После перезапуска загрузка не продолжилась",
+   "cause": "в downloads.json состояние не running (пауза сохраняется как пауза)",
+   "look": "downloads.json; run() продолжает только running",
+   "refs": [
+    "src-tauri/src/lib.rs#run"
+   ]
+  },
+  {
+   "symptom": "«отправитель не получил «получено»: …» в журнале",
+   "cause": "отправитель не в сети в момент подтверждения",
+   "look": "ack_pending в downloads.json — повтор при следующем запуске",
+   "refs": [
+    "src-tauri/src/lib.rs#send_done"
+   ]
+  }
+ ],
+ "isolate": "tikdl get <ссылка> <папка> — та же логика ядра без окна.",
+ "code": []
+}

@@ -1,0 +1,83 @@
+{
+ "id": "app.shell",
+ "name": "Запуск и строка меню",
+ "kind": "оболочка приложения",
+ "layer": "app",
+ "purpose": "Точка входа: консольный режим или окно; плагины Tauri; один экземпляр; значок в строке меню («Открыть TikDL», «Выйти из TikDL»); ссылки tikdl:// в очередь; старт узла, продолжение загрузок, отправка отложенных «получено»; события node-ready, node-error, links-pending, shares-changed; закрыть окно = спрятать; уведомление «Готово».",
+ "not": "Не обрабатывает команды окна — это app.commands; консольные команды — app.cli.",
+ "symbols": [
+  "src-tauri/src/main.rs#main",
+  "src-tauri/src/lib.rs#notify_done",
+  "src-tauri/src/lib.rs#show_main",
+  "src-tauri/src/lib.rs#build_tray",
+  "src-tauri/src/lib.rs#run"
+ ],
+ "uses": [
+  {
+   "to": "app.cli",
+   "how": "вызов",
+   "what": "cli_main (из main.rs через tikdl_lib::)",
+   "static": false
+  },
+  {
+   "to": "core.once",
+   "how": "ложная связь",
+   "what": "парсер принял app.handle() за once::Host::handle — по имени; в коде такого вызова нет"
+  },
+  {
+   "to": "app.state",
+   "how": "вызов",
+   "what": "AppState, load_downloads"
+  },
+  {
+   "to": "app.jobs",
+   "how": "вызов",
+   "what": "spawn_job, send_done"
+  },
+  {
+   "to": "app.commands",
+   "how": "регистрация",
+   "what": "generate_handler!"
+  },
+  {
+   "to": "app.android",
+   "how": "вызов",
+   "what": "IMPORTS_DIR, sync_service"
+  },
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "DATA_DIR_OVERRIDE, watch_once"
+  },
+  {
+   "to": "core.links",
+   "how": "вызов",
+   "what": "parse_link"
+  },
+  {
+   "to": "ui.api",
+   "how": "событие",
+   "what": "links-pending, node-error, shares-changed, node-ready"
+  },
+  {
+   "to": "ext.os",
+   "how": "система",
+   "what": "уведомления, строка меню, tikdl://",
+   "static": false
+  }
+ ],
+ "observe": "Значок в строке меню; события в окне.",
+ "verify": "docs/plans/ACCEPT.md: «Deep link», «Close → hide»; открыть tikdl://get/… — окно показывает карточку",
+ "failures": [
+  {
+   "symptom": "Ссылка из браузера не открыла приложение",
+   "cause": "схема tikdl не зарегистрирована (Linux/Windows — register_all при запуске; macOS — после установки в /Applications)",
+   "look": "tauri.conf.json → plugins.deep-link",
+   "refs": [
+    "src-tauri/src/lib.rs#run"
+   ]
+  }
+ ],
+ "isolate": "cargo tauri dev; ссылка — open 'tikdl://get/…'.",
+ "code": []
+}

@@ -1,0 +1,53 @@
+{
+ "id": "core.paths",
+ "name": "Пути и запреты",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "Безопасные имена из чужой раздачи (без ../, C:, CON…), имя без перезаписи («имя (1)»), временное .tikdl-part, скрытые файлы, запись только для владельца, запрет раздачи системного диска и папок, домашней папки целиком, ключей программ, папки TikDL.",
+ "not": "Не читает и не пишет содержимое передачи — это core.share и core.download.",
+ "code": [
+  "src-tauri/src/paths.rs"
+ ],
+ "uses": [],
+ "observe": "Тексты отказа приходят в окно и CLI.",
+ "verify": "cargo test (тесты paths.rs)",
+ "tests": [
+  "src-tauri/src/paths.rs#safe_join_rejects_bad_names",
+  "src-tauri/src/paths.rs#unique_name_never_overwrites",
+  "src-tauri/src/paths.rs#forbidden_share_home_rules",
+  "src-tauri/src/paths.rs#forbidden_share_system_rules",
+  "src-tauri/src/paths.rs#key_is_owner_only",
+  "src-tauri/src/paths.rs#hidden_files_detected"
+ ],
+ "invariants": [
+  "Имена из чужой раздачи проходят safe_join до записи на диск.",
+  "Системный диск и папки, домашняя папка целиком, скрытое в ней, ~/Library и папка TikDL не раздаются никогда."
+ ],
+ "failures": [
+  {
+   "symptom": "«недопустимое имя файла в раздаче: …»",
+   "cause": "в раздаче опасное имя",
+   "look": "safe_join",
+   "refs": [
+    "src-tauri/src/paths.rs#safe_join"
+   ]
+  },
+  {
+   "symptom": "«это системная папка — TikDL её не раздаёт» и др.",
+   "cause": "путь в запрещённом списке",
+   "look": "forbidden_share",
+   "refs": [
+    "src-tauri/src/paths.rs#forbidden_share"
+   ]
+  },
+  {
+   "symptom": "«не удалось проверить, что это за папка — TikDL её не раздаёт»",
+   "cause": "не удалось прочитать id файла",
+   "look": "UNCHECKABLE",
+   "refs": [
+    "src-tauri/src/paths.rs#UNCHECKABLE"
+   ]
+  }
+ ],
+ "isolate": "Чистые функции: cargo test в src-tauri."
+}

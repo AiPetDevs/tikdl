@@ -186,3 +186,11 @@ Output: `../_RESULTS/TikDL_0.1.0_universal.dmg`.
 - data: whole git history
 - expect: repo public; all authors TikDL; no Mac username, host, disk paths, email in any commit
 - run: 2026-11-25T13:33:21-05:00 · result: ok · evidence: <project>/docs/plans/evidence/public_repo_check.txt (mtime 2026-11-25T13:33:21-05:00)
+- run: 2026-11-25T13:42:14-05:00 · result: ok · evidence: <scratch>/45da358f-f99c-4793-9faf-b1e25c342651/scratchpad/public_repo_recheck.txt (mtime 2026-11-25T13:42:02-05:00) · note: Свежий клон с GitHub: 16 коммитов, все авторы TikDL; имени пользователя, компьютера, дисковых путей, почты нет; картинки — только Android-эмулятор. Остаток: старый коммит e008dec открывается по SHA (кэш GitHub) — убрать пересозданием репозитория или через поддержку.
+
+## 2026-11-25 15:14 · App passport matches the code
+- written: 2026-11-25T15:14:02-05:00
+- where: passport/view.html in a browser; node scripts/passport.mjs
+- data: whole repo at 4ab9f9d + passport
+- expect: check green, 0 warnings; every user action has a feature card; where/impact answer by symbol; map path of a feature highlighted; no personal data in passport
+- run: 2026-11-25T15:14:07-05:00 · result: ok · evidence: <project>/docs/plans/evidence/passport_check.txt (mtime 2026-11-25T15:13:58-05:00) · note: check зелёный, 0 предупреждений; 30 компонентов, 13 функций; where/impact отвечают; путь «Скачать по ссылке» на карте подсвечен связно (passport_view.jpg); личных данных в passport/ нет. Не проверено: Kotlin-файлы на карте (сканер паспорта пропускает папку gen/)

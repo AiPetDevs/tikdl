@@ -1,0 +1,38 @@
+{
+ "id": "ui.shell",
+ "name": "Оболочка окна",
+ "kind": "интерфейс",
+ "layer": "ui",
+ "purpose": "Каркас окна: вкладки «Скачать» и «Раздать», баннер «Сеть не запустилась», слой перетаскивания файлов, маршрут витрины #/kit. Запускает boot() состояния.",
+ "not": "Не хранит данные и не ходит в Rust — это ui.state и ui.api; содержимое вкладок рисуют ui.screens.",
+ "code": [
+  "ui/app.js",
+  "ui/index.html",
+  "ui/tokens.css"
+ ],
+ "uses": [
+  {
+   "to": "ui.kit",
+   "how": "импорт",
+   "what": "Page, Tabs, DropOverlay, Text"
+  },
+  {
+   "to": "ui.screens",
+   "how": "импорт",
+   "what": "GetScreen, ShareScreen"
+  },
+  {
+   "to": "ui.state",
+   "how": "импорт",
+   "what": "boot, on"
+  },
+  {
+   "to": "ui.showcase",
+   "how": "импорт",
+   "what": "Showcase (#/kit)"
+  }
+ ],
+ "observe": "Окно приложения; в браузере с моком — http://127.0.0.1:8765/index.html.",
+ "verify": "npm run ui:smoke (открывает экраны и витрину, ловит ошибки консоли)",
+ "isolate": "Интерфейс в браузере без Rust: (cd ui && python3 -m http.server 8765 --bind 127.0.0.1) — api.js сам берёт мок."
+}

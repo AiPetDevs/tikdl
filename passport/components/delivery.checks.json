@@ -1,0 +1,18 @@
+{
+ "id": "delivery.checks",
+ "name": "Проверки и сборка",
+ "kind": "скрипты",
+ "layer": "delivery",
+ "purpose": "ui_check (ворота кода интерфейса), ui_smoke (экраны открываются без ошибок, снимки), ESLint (слои), паспорт (сверка карты с кодом), build.rs Tauri.",
+ "not": "Не часть приложения; правила ворот меняет только владелец.",
+ "code": [
+  "scripts/*.mjs",
+  "scripts/*.html",
+  "eslint.config.js",
+  "src-tauri/build.rs"
+ ],
+ "uses": [],
+ "observe": "npm run check",
+ "verify": "npm run check && npm run passport:check",
+ "isolate": "Каждый скрипт запускается отдельно: node scripts/<имя>.mjs."
+}

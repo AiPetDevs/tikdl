@@ -1,0 +1,77 @@
+{
+ "id": "feature.peek",
+ "name": "«Что внутри?»",
+ "user": "В карточке входящей ссылки нажать «Что внутри?» — увидеть список файлов и проверенные размеры, хватит ли места, до скачивания.",
+ "trigger": "Карточка подтверждения → «Что внутри?»",
+ "input": "ссылка, папка назначения",
+ "output": "список файлов, общий размер, свободное место",
+ "steps": [
+  {
+   "comp": "ui.state",
+   "does": "запрос и состояние «загружается»",
+   "at": [
+    "ui/state.js#peekConfirm",
+    "ui/state.js#peekView"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "команда peek_link",
+   "at": [
+    "ui/api.js#api.peekLink"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "для одноразовой — сначала закрепить; затем спросить у раздающего",
+   "at": [
+    "src-tauri/src/lib.rs#peek_link"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "одноразовая: claim — закрепить за этим устройством",
+   "at": [
+    "src-tauri/src/core.rs#Node::resolve",
+    "src-tauri/src/once.rs#claim"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "список файлов и проверенные размеры, свободное место",
+   "at": [
+    "src-tauri/src/core.rs#Node::peek",
+    "src-tauri/src/core.rs#free_space"
+   ]
+  }
+ ],
+ "reads": "сеть",
+ "writes": "у отправителя одноразовой ссылки — привязка к этому устройству",
+ "errors": [
+  {
+   "when": "раздающий не ответил",
+   "shows": "«раздающий не ответил за 15 с»",
+   "at": [
+    "src-tauri/src/core.rs#Node::peek"
+   ]
+  },
+  {
+   "when": "список слишком большой",
+   "shows": "«список файлов раздачи слишком большой (… байт)»",
+   "at": [
+    "src-tauri/src/core.rs#Node::peek"
+   ]
+  },
+  {
+   "when": "одноразовую уже закрепило другое устройство",
+   "shows": "«ссылка уже использована на другом устройстве — попросите отправителя прислать новую»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#share_and_download_between_two_nodes"
+ ],
+ "verify": "docs/plans/ACCEPT.md: «Peek»; для одноразовой — docs/ONCE_LINKS.md §6"
+}

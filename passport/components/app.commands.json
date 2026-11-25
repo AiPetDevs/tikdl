@@ -1,0 +1,95 @@
+{
+ "id": "app.commands",
+ "name": "Команды окна",
+ "kind": "команды Tauri",
+ "layer": "app",
+ "purpose": "Команды, которые вызывает интерфейс: разбор ссылки, «Что внутри?», папка по умолчанию, входящие ссылки, список и запуск, пауза, удаление загрузок, раздать, список, остановить, новая ссылка.",
+ "not": "Не выполняет передачу: загрузку ведёт app.jobs, раздачу — core.share, одноразовые ссылки — core.once.",
+ "symbols": [
+  "src-tauri/src/lib.rs#LinkInfo",
+  "src-tauri/src/lib.rs#inspect_link",
+  "src-tauri/src/lib.rs#already_received",
+  "src-tauri/src/lib.rs#PeekInfo",
+  "src-tauri/src/lib.rs#peek_link",
+  "src-tauri/src/lib.rs#default_download_dir",
+  "src-tauri/src/lib.rs#take_pending_links",
+  "src-tauri/src/lib.rs#list_downloads",
+  "src-tauri/src/lib.rs#start_download",
+  "src-tauri/src/lib.rs#pause_download",
+  "src-tauri/src/lib.rs#remove_download",
+  "src-tauri/src/lib.rs#ShareProgress",
+  "src-tauri/src/lib.rs#share_path",
+  "src-tauri/src/lib.rs#list_shares",
+  "src-tauri/src/lib.rs#stop_share",
+  "src-tauri/src/lib.rs#renew_share"
+ ],
+ "uses": [
+  {
+   "to": "app.state",
+   "how": "вызов",
+   "what": "AppState, DlRecord"
+  },
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "Node::short_id — код устройства"
+  },
+  {
+   "to": "app.jobs",
+   "how": "вызов",
+   "what": "spawn_job"
+  },
+  {
+   "to": "core.links",
+   "how": "вызов",
+   "what": "parse_link"
+  },
+  {
+   "to": "core.download",
+   "how": "вызов",
+   "what": "peek, forget_download"
+  },
+  {
+   "to": "core.share",
+   "how": "вызов",
+   "what": "share, list_shares, stop_share"
+  },
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "renew_once, resolve"
+  },
+  {
+   "to": "app.android",
+   "how": "вызов",
+   "what": "import_content, sync_service"
+  },
+  {
+   "to": "ui.api",
+   "how": "событие",
+   "what": "share-progress"
+  }
+ ],
+ "observe": "Ошибка команды возвращается строкой и видна в окне.",
+ "verify": "cargo tauri dev + сценарии окна в docs/plans/ACCEPT.md",
+ "failures": [
+  {
+   "symptom": "«уже получено на этом компьютере — одноразовая ссылка сгорела»",
+   "cause": "эту одноразовую ссылку этот TikDL уже скачал",
+   "look": "downloads.json: запись once-… в состоянии done",
+   "refs": [
+    "src-tauri/src/lib.rs#already_received"
+   ]
+  },
+  {
+   "symptom": "«нет папки для выбранных файлов»",
+   "cause": "файлы выбраны без общей родительской папки (Android-выбор)",
+   "look": "share_path",
+   "refs": [
+    "src-tauri/src/lib.rs#share_path"
+   ]
+  }
+ ],
+ "isolate": "Те же функции ядра доступны из CLI: tikdl get / serve / shares / stop.",
+ "code": []
+}

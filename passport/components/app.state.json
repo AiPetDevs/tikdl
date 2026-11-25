@@ -1,0 +1,52 @@
+{
+ "id": "app.state",
+ "name": "Реестр загрузок",
+ "kind": "модуль",
+ "layer": "app",
+ "purpose": "AppState: узел (запускается один раз, лениво), задачи загрузки, очередь входящих ссылок. Реестр downloads.json переживает перезапуск: ссылка, папка, состояние, ожидание «получено» для одноразовых.",
+ "not": "Не скачивает — это app.jobs и core.download; не хранит раздачи — это core.share (shares.json).",
+ "symbols": [
+  "src-tauri/src/lib.rs#DOWNLOADS_FILE",
+  "src-tauri/src/lib.rs#DlRecord",
+  "src-tauri/src/lib.rs#Job",
+  "src-tauri/src/lib.rs#AppState",
+  "src-tauri/src/lib.rs#load_downloads",
+  "src-tauri/src/lib.rs#save_downloads"
+ ],
+ "uses": [
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "Node::start, data_dir"
+  },
+  {
+   "to": "core.paths",
+   "how": "вызов",
+   "what": "write_private"
+  },
+  {
+   "to": "data.registry",
+   "how": "чтение и запись",
+   "what": "downloads.json",
+   "static": false
+  }
+ ],
+ "data": {
+  "reads": "downloads.json",
+  "writes": "downloads.json (0600, после каждого изменения состояния)"
+ },
+ "observe": "downloads.json в папке данных.",
+ "verify": "docs/plans/ACCEPT.md: «Pause → quit → relaunch»",
+ "failures": [
+  {
+   "symptom": "«не удалось сохранить список загрузок: …» в журнале",
+   "cause": "нет места или прав в папке данных",
+   "look": "папка данных (passport.json → dataDir)",
+   "refs": [
+    "src-tauri/src/lib.rs#save_downloads"
+   ]
+  }
+ ],
+ "isolate": "Через CLI не используется (там свой Node без реестра); проверка — окно.",
+ "code": []
+}

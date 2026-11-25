@@ -1,0 +1,29 @@
+{
+ "id": "ui.screens",
+ "name": "Экраны",
+ "kind": "экраны",
+ "layer": "ui",
+ "purpose": "Вкладка «Скачать»: поле ссылки, папка, карточка подтверждения входящей ссылки, строки загрузок с паузой и удалением. Вкладка «Раздать»: выбор файлов или папки, переключатель «Одноразовая ссылка», строки раздач со ссылкой, «Новая ссылка», «Остановить».",
+ "not": "Не вычисляет и не хранит: тексты строк и действия берут из ui.state (ESLint запрещает экрану ходить в api); элементы — из ui.kit.",
+ "code": [
+  "ui/screens/**"
+ ],
+ "uses": [
+  {
+   "to": "ui.kit",
+   "how": "импорт",
+   "what": "Button, TextField, PathField, Switch, TransferRow, StatusChip…"
+  },
+  {
+   "to": "ui.state",
+   "how": "импорт",
+   "what": "S, actions, downloadView, shareView, shareActions, setOnce"
+  }
+ ],
+ "observe": "Снимки shots/ после ui_smoke; живое окно.",
+ "verify": "npm run ui:check && npm run lint && npm run ui:smoke",
+ "invariants": [
+  "Экран не импортирует api.js и не содержит литеральных цветов и размеров (ui_check, ESLint)."
+ ],
+ "isolate": "В браузере с моком: вкладки работают на поддельных данных ui/api.mock.js."
+}

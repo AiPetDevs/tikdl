@@ -1,0 +1,106 @@
+{
+ "id": "core.download",
+ "name": "Загрузка и выкладка",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "«Что внутри?» (имена и проверенные размеры без скачивания), проверка места до первого байта, загрузка в downloads/ под тегом dl-<id>, проверка имён, выкладка каждого верхнего элемента во временное имя и переименование, снятие тега.",
+ "not": "Не ведёт реестр загрузок и прогресс окна — это app.jobs; не решает, можно ли брать одноразовую ссылку — core.once.",
+ "symbols": [
+  "src-tauri/src/core.rs#Cancelled",
+  "src-tauri/src/core.rs#Peek",
+  "src-tauri/src/core.rs#free_space",
+  "src-tauri/src/core.rs#human",
+  "src-tauri/src/core.rs#existing_ancestor",
+  "src-tauri/src/core.rs#same_volume",
+  "src-tauri/src/core.rs#remove_any",
+  "src-tauri/src/core.rs#Node::peek",
+  "src-tauri/src/core.rs#Node::check_space",
+  "src-tauri/src/core.rs#Node::download",
+  "src-tauri/src/core.rs#Node::forget_download",
+  "src-tauri/src/core.rs#share_and_download_between_two_nodes"
+ ],
+ "uses": [
+  {
+   "to": "core.paths",
+   "how": "вызов",
+   "what": "safe_join, unique_name, part_name"
+  },
+  {
+   "to": "core.once",
+   "how": "ложная связь",
+   "what": "парсер принял ticket.addr() за once::Host::addr — по имени; в коде такого вызова нет"
+  },
+  {
+   "to": "ext.peer",
+   "how": "сеть",
+   "what": "GetRequest, get_hash_seq_and_sizes",
+   "static": false
+  },
+  {
+   "to": "data.store",
+   "how": "запись",
+   "what": "downloads/, теги dl-*",
+   "static": false
+  }
+ ],
+ "data": {
+  "reads": "сеть, downloads/",
+  "writes": "downloads/ (временно), папка назначения: .<имя>.tikdl-part → <имя> или «имя (1)»"
+ },
+ "observe": "Сообщения ошибок по-русски уходят в строку загрузки целиком.",
+ "verify": "cd src-tauri && cargo test; docs/plans/ACCEPT.md: P1-4, P1-5, P1-6",
+ "tests": [
+  "src-tauri/src/core.rs#share_and_download_between_two_nodes",
+  "src-tauri/src/paths.rs#safe_join_rejects_bad_names",
+  "src-tauri/src/paths.rs#unique_name_never_overwrites"
+ ],
+ "invariants": [
+  "Тег dl-<id> ставится ДО загрузки: сборщик не тронет недокачанное, докачка с того же места.",
+  "В папке назначения не бывает полузаписанных файлов, существующее не перезаписывается.",
+  "Выкладка — копией (reflink на APFS), не переносом (TryReference)."
+ ],
+ "failures": [
+  {
+   "symptom": "«не хватает места на диске (…): нужно …, свободно …»",
+   "cause": "на томе назначения или хранилища меньше нужного",
+   "look": "check_space",
+   "refs": [
+    "src-tauri/src/core.rs#Node::check_space"
+   ]
+  },
+  {
+   "symptom": "«не удалось скачать: раздача остановлена, её файлы изменились или раздающий не в сети (…)»",
+   "cause": "раздающий отказал (хеш не в allow) или недоступен",
+   "look": "у раздающего: tikdl shares",
+   "refs": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  },
+  {
+   "symptom": "«раздающий не ответил за 15 с»",
+   "cause": "раздающий не в сети или relay недоступен",
+   "look": "peek",
+   "refs": [
+    "src-tauri/src/core.rs#Node::peek"
+   ]
+  },
+  {
+   "symptom": "«список файлов раздачи слишком большой (… байт)»",
+   "cause": "список больше 16 МБ",
+   "look": "peek",
+   "refs": [
+    "src-tauri/src/core.rs#Node::peek"
+   ]
+  },
+  {
+   "symptom": "Место не освободилось после загрузки",
+   "cause": "сборщик ещё не прошёл (TIKDL_GC_SECS, 15 с)",
+   "look": "размер downloads/",
+   "refs": [
+    "src-tauri/src/core.rs#gc_interval"
+   ]
+  }
+ ],
+ "isolate": "Два узла в одном процессе (тест) или HOME=A serve / HOME=B get.",
+ "code": []
+}

@@ -1,0 +1,19 @@
+{
+ "id": "ui.kit",
+ "name": "Кит интерфейса",
+ "kind": "компоненты",
+ "layer": "ui",
+ "purpose": "Общие элементы: кнопки, поля, переключатель, вкладки, строка передачи с полосой, ярлык состояния, значки, раскладка. Только вид, без данных.",
+ "not": "Не знает про загрузки и раздачи — данные приходят параметрами от ui.screens; витрина всех состояний — ui.showcase.",
+ "code": [
+  "ui/kit/{Button,DropOverlay,Field,FileList,IconButton,Layout,ProgressPill,StatusChip,Switch,Tabs,TransferRow,dom,icons}.js",
+  "ui/kit/kit.css"
+ ],
+ "uses": [],
+ "observe": "Витрина #/kit.",
+ "verify": "npm run ui:check (реестр, токены, сырые контролы)",
+ "invariants": [
+  "Цвета и размеры — только токены из ui/tokens.css."
+ ],
+ "isolate": "Витрина #/kit в браузере с моком."
+}

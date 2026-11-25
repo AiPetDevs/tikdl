@@ -1,0 +1,101 @@
+{
+ "id": "feature.startup",
+ "name": "Запуск и работа в строке меню",
+ "user": "Запустить TikDL: прежние раздачи сразу доступны, прерванные загрузки продолжаются сами. Закрытие окна прячет его — раздачи продолжаются; «Выйти из TikDL» в строке меню — выход.",
+ "trigger": "Запуск приложения; закрытие окна; меню в строке меню",
+ "input": "папка данных",
+ "output": "узел в сети, событие node-ready",
+ "steps": [
+  {
+   "comp": "app.shell",
+   "does": "консоль или окно",
+   "at": [
+    "src-tauri/src/main.rs#main",
+    "src-tauri/src/lib.rs#run"
+   ]
+  },
+  {
+   "comp": "app.state",
+   "does": "реестр загрузок",
+   "at": [
+    "src-tauri/src/lib.rs#load_downloads",
+    "src-tauri/src/lib.rs#AppState::node"
+   ]
+  },
+  {
+   "comp": "core.node",
+   "does": "ключ, хранилища, порт, временные узлы одноразовых ссылок",
+   "at": [
+    "src-tauri/src/core.rs#Node::start",
+    "src-tauri/src/core.rs#load_or_create_key"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "прежние раздачи и белый список",
+   "at": [
+    "src-tauri/src/core.rs#load_shares",
+    "src-tauri/src/core.rs#Node::refresh_allow"
+   ]
+  },
+  {
+   "comp": "app.jobs",
+   "does": "продолжить загрузки, отправить отложенные «получено»",
+   "at": [
+    "src-tauri/src/lib.rs#spawn_job",
+    "src-tauri/src/lib.rs#send_done"
+   ]
+  },
+  {
+   "comp": "app.android",
+   "does": "Android: служба, если есть раздачи",
+   "at": [
+    "src-tauri/src/lib.rs#sync_service"
+   ]
+  },
+  {
+   "comp": "app.shell",
+   "does": "строка меню; закрыть окно = спрятать; событие node-ready",
+   "at": [
+    "src-tauri/src/lib.rs#build_tray",
+    "src-tauri/src/lib.rs#run"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "подписки на события",
+   "at": [
+    "ui/api.js#api.on"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "подписки на события, первые списки",
+   "at": [
+    "ui/state.js#boot"
+   ]
+  }
+ ],
+ "reads": "node.key, port, shares.json, downloads.json",
+ "writes": "node.key (первый запуск), port",
+ "errors": [
+  {
+   "when": "хранилище занято",
+   "shows": "«Сеть не запустилась: хранилище TikDL уже открыто другим запуском (окно приложения или консольная команда) — закройте его»",
+   "at": [
+    "src-tauri/src/core.rs#STORE_BUSY"
+   ]
+  },
+  {
+   "when": "ключ испорчен",
+   "shows": "«Ключ узла повреждён (сохранён как …). Создан новый ключ — старые ссылки перестанут работать.»",
+   "at": [
+    "src-tauri/src/core.rs#load_or_create_key"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#once_link_survives_sender_restart_and_public_share"
+ ],
+ "verify": "docs/plans/ACCEPT.md: P1-8, P1-9, «Close → hide»"
+}

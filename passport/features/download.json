@@ -1,0 +1,141 @@
+{
+ "id": "feature.download",
+ "name": "Скачать по ссылке",
+ "user": "Вставить ссылку на вкладке «Скачать», выбрать папку, нажать «Скачать». Файл или папка появятся в папке назначения; существующее не перезапишется («имя (1)»).",
+ "trigger": "Вкладка «Скачать» → поле ссылки → «Скачать»; также «Скачать» в карточке входящей ссылки",
+ "input": "ссылка tikdl://get/…, https-ссылка страницы-прокладки или голый тикет; папка (по умолчанию ~/Downloads)",
+ "output": "файл/папка в папке назначения, строка «готово», уведомление «Готово»",
+ "steps": [
+  {
+   "comp": "ui.screens",
+   "does": "кнопка «Скачать» берёт текст поля",
+   "at": [
+    "ui/screens/get.js#GetScreen"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "разбирает ссылку, рисует строку «Подключение…»",
+   "at": [
+    "ui/state.js#startDownload",
+    "ui/state.js#run"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "команды inspect_link, start_download",
+   "at": [
+    "ui/api.js#api.inspectLink",
+    "ui/api.js#api.startDownload"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "разбор ссылки; запись в downloads.json со state=running; запуск задачи",
+   "at": [
+    "src-tauri/src/lib.rs#inspect_link",
+    "src-tauri/src/lib.rs#start_download"
+   ]
+  },
+  {
+   "comp": "core.links",
+   "does": "тикет, ?size, ?name",
+   "at": [
+    "src-tauri/src/core.rs#parse_link"
+   ]
+  },
+  {
+   "comp": "app.jobs",
+   "does": "нет размера → спросить у раздающего; проверить место; скачать; progress раз в 250 мс; итог в downloads.json",
+   "at": [
+    "src-tauri/src/lib.rs#spawn_job"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "отказ до первого байта, если места не хватит",
+   "at": [
+    "src-tauri/src/core.rs#Node::check_space"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "тег dl-<id>, загрузка в downloads/, проверка имён, выкладка через .tikdl-part, снятие тега",
+   "at": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  },
+  {
+   "comp": "core.paths",
+   "does": "имя внутри папки, без перезаписи, временное имя",
+   "at": [
+    "src-tauri/src/paths.rs#safe_join",
+    "src-tauri/src/paths.rs#unique_name",
+    "src-tauri/src/paths.rs#part_name"
+   ]
+  },
+  {
+   "comp": "app.shell",
+   "does": "уведомление «Готово»",
+   "at": [
+    "src-tauri/src/lib.rs#notify_done"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "событие progress → строка загрузки",
+   "at": [
+    "ui/state.js#upsert",
+    "ui/state.js#downloadView"
+   ]
+  }
+ ],
+ "reads": "ссылка, downloads.json, сеть",
+ "writes": "downloads.json, downloads/ (временно), папка назначения",
+ "config": [
+  "TIKDL_GC_SECS"
+ ],
+ "errors": [
+  {
+   "when": "ссылка не разбирается",
+   "shows": "«неверный тикет» под полем",
+   "at": [
+    "src-tauri/src/core.rs#parse_link"
+   ]
+  },
+  {
+   "when": "места не хватит",
+   "shows": "«не хватает места на диске (…): нужно …, свободно …», загрузка не начинается",
+   "at": [
+    "src-tauri/src/core.rs#Node::check_space"
+   ]
+  },
+  {
+   "when": "раздача остановлена, изменилась или раздающий не в сети",
+   "shows": "«не удалось скачать: раздача остановлена, её файлы изменились или раздающий не в сети (…)», ярлык «сбой», ▶ — повторить",
+   "at": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  },
+  {
+   "when": "опасное имя файла в раздаче",
+   "shows": "«недопустимое имя файла в раздаче: …», ничего не записано",
+   "at": [
+    "src-tauri/src/paths.rs#safe_join"
+   ]
+  },
+  {
+   "when": "хранилище занято консолью",
+   "shows": "«хранилище TikDL уже открыто другим запуском (окно приложения или консольная команда) — закройте его»",
+   "at": [
+    "src-tauri/src/core.rs#STORE_BUSY"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#share_and_download_between_two_nodes",
+  "src-tauri/src/paths.rs#safe_join_rejects_bad_names",
+  "src-tauri/src/paths.rs#unique_name_never_overwrites"
+ ],
+ "verify": "cargo test; docs/plans/ACCEPT.md: P0 #11, P1-1, «Confirm → download»"
+}

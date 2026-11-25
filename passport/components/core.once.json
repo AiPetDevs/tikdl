@@ -1,0 +1,123 @@
+{
+ "id": "core.once",
+ "name": "Одноразовые ссылки",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "Временный узел со своим ключом на каждую ссылку; закрепление за первым устройством (claim, запись на диск до ответа), шлюз над iroh-blobs только для этого устройства и этих хешей, «получено» → ссылка сгорает и узел выключается; сроки 3 дня без закрепления и 7 дней без активности; не больше 10 сразу; «Новая ссылка».",
+ "not": "Не считает и не хранит файлы — это core.share (store/); загрузку на стороне получателя ведёт core.download.",
+ "code": [
+  "src-tauri/src/once.rs"
+ ],
+ "symbols": [
+  "src-tauri/src/core.rs#OnceView",
+  "src-tauri/src/core.rs#Node::watch_once",
+  "src-tauri/src/core.rs#Node::renew_once",
+  "src-tauri/src/core.rs#Node::resolve",
+  "src-tauri/src/core.rs#Node::once_done",
+  "src-tauri/src/core.rs#once_room",
+  "src-tauri/src/core.rs#once_share",
+  "src-tauri/src/core.rs#once_state",
+  "src-tauri/src/core.rs#once_link_one_device_then_burned",
+  "src-tauri/src/core.rs#once_link_renew_stale_spawn_expiry_limit",
+  "src-tauri/src/core.rs#once_link_concurrent_claims_one_winner",
+  "src-tauri/src/core.rs#once_link_survives_sender_restart_and_public_share"
+ ],
+ "uses": [
+  {
+   "to": "core.node",
+   "how": "вызов",
+   "what": "bind_endpoint, now_secs"
+  },
+  {
+   "to": "core.share",
+   "how": "вызов",
+   "what": "ShareRecord, save_shares"
+  },
+  {
+   "to": "ext.iroh",
+   "how": "библиотека",
+   "what": "Endpoint, Router, BlobsProtocol, EventSender"
+  },
+  {
+   "to": "ext.relay",
+   "how": "сеть",
+   "what": "relay-адрес временного узла, pkarr",
+   "static": false
+  },
+  {
+   "to": "data.shares",
+   "how": "запись",
+   "what": "once: ключ, хеш токена, устройство, этап",
+   "static": false
+  }
+ ],
+ "data": {
+  "reads": "shares.json",
+  "writes": "shares.json (привязка — до ответа «да»)"
+ },
+ "observe": "tikdl serve --once печатает каждую смену этапа; в окне ярлык «одноразовая · ждёт» → «закреплена» → «получено»; событие shares-changed.",
+ "verify": "cd src-tauri && cargo test once_; живой прогон docs/ONCE_LINKS.md §6",
+ "tests": [
+  "src-tauri/src/core.rs#once_link_one_device_then_burned",
+  "src-tauri/src/core.rs#once_link_renew_stale_spawn_expiry_limit",
+  "src-tauri/src/core.rs#once_link_concurrent_claims_one_winner",
+  "src-tauri/src/core.rs#once_link_survives_sender_restart_and_public_share"
+ ],
+ "invariants": [
+  "Скачать может только закреплённое устройство (TLS-проверенный id); остальным TAKEN.",
+  "Привязка записывается на диск до ответа «да».",
+  "В ссылке нет имени, размера, хеша, постоянного ключа и IP отправителя.",
+  "Шлюз никогда не передаёт shutdown в BlobsProtocol — это выключило бы общее хранилище."
+ ],
+ "failures": [
+  {
+   "symptom": "«ссылка уже использована на другом устройстве — попросите отправителя прислать новую»",
+   "cause": "ссылку первым открыло другое устройство",
+   "look": "у отправителя: код устройства в строке раздачи",
+   "refs": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "symptom": "«отправитель не в сети, или ссылка уже не действует (получена, остановлена или истекла)»",
+   "cause": "отправитель выключен, или ссылка сгорела/остановлена",
+   "look": "у отправителя: tikdl shares",
+   "refs": [
+    "src-tauri/src/once.rs#request"
+   ]
+  },
+  {
+   "symptom": "«ссылка недействительна — отправитель её остановил или выдал новую»",
+   "cause": "токен не совпал",
+   "look": "",
+   "refs": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "symptom": "«ссылка больше не действует: файлы уже получены или истёк срок»",
+   "cause": "этап used или expired",
+   "look": "",
+   "refs": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "symptom": "«это ваша собственная одноразовая ссылка — откройте её на том устройстве, которому она предназначена»",
+   "cause": "отправитель открыл свою же ссылку",
+   "look": "",
+   "refs": [
+    "src-tauri/src/core.rs#Node::resolve"
+   ]
+  },
+  {
+   "symptom": "«одновременно может действовать не больше 10 одноразовых ссылок — остановите ненужные»",
+   "cause": "лимит MAX_LIVE",
+   "look": "",
+   "refs": [
+    "src-tauri/src/core.rs#once_room"
+   ]
+  }
+ ],
+ "isolate": "cargo test once_ (два-три узла в одном процессе)."
+}

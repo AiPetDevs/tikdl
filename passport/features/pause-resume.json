@@ -1,0 +1,67 @@
+{
+ "id": "feature.pause-resume",
+ "name": "Пауза и продолжение",
+ "user": "Нажать ⏸ в строке загрузки — загрузка встаёт; ▶ — продолжается с того же места, даже после выхода из приложения. Прерванная выходом (не паузой) загрузка продолжается сама при следующем запуске.",
+ "trigger": "Кнопки ⏸ / ▶ в строке загрузки; запуск приложения",
+ "input": "id загрузки",
+ "output": "строка «пауза» / продолжение с места остановки",
+ "steps": [
+  {
+   "comp": "ui.screens",
+   "does": "кнопки строки",
+   "at": [
+    "ui/screens/get.js#ACTIONS.pause",
+    "ui/screens/get.js#ACTIONS.resume"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "действия",
+   "at": [
+    "ui/state.js#actions.pause",
+    "ui/state.js#actions.resume"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "pause_download / start_download",
+   "at": [
+    "ui/api.js#api.pauseDownload",
+    "ui/api.js#api.startDownload"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "отменить задачу, состояние paused в downloads.json",
+   "at": [
+    "src-tauri/src/lib.rs#pause_download"
+   ]
+  },
+  {
+   "comp": "app.shell",
+   "does": "при запуске: продолжить все running",
+   "at": [
+    "src-tauri/src/lib.rs#run"
+   ]
+  },
+  {
+   "comp": "app.jobs",
+   "does": "новая задача докачивает: тег dl-<id> сохранил уже полученное",
+   "at": [
+    "src-tauri/src/lib.rs#spawn_job"
+   ]
+  }
+ ],
+ "reads": "downloads.json, downloads/",
+ "writes": "downloads.json",
+ "errors": [
+  {
+   "when": "раздающий исчез во время паузы",
+   "shows": "«не удалось скачать: раздающий недоступен, прервал связь или раздача остановлена»",
+   "at": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  }
+ ],
+ "verify": "docs/plans/ACCEPT.md: «Pause → quit → relaunch», P1-8"
+}

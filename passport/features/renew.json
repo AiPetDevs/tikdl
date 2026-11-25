@@ -1,0 +1,63 @@
+{
+ "id": "feature.renew",
+ "name": "Новая ссылка",
+ "user": "В строке одноразовой раздачи нажать «Новая ссылка» — старая перестаёт работать, появляется новая на те же файлы без пересчёта.",
+ "trigger": "Кнопка «Новая ссылка» (ждёт / закреплена / срок истёк)",
+ "input": "id раздачи",
+ "output": "новая одноразовая ссылка",
+ "steps": [
+  {
+   "comp": "ui.state",
+   "does": "действие",
+   "at": [
+    "ui/state.js#shareActions.renew"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "renew_share",
+   "at": [
+    "ui/api.js#api.renewShare"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "команда",
+   "at": [
+    "src-tauri/src/lib.rs#renew_share"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "остановить старый временный узел, новый ключ и токен, проверка лимита",
+   "at": [
+    "src-tauri/src/core.rs#Node::renew_once",
+    "src-tauri/src/core.rs#once_room",
+    "src-tauri/src/once.rs#Host::stop",
+    "src-tauri/src/once.rs#Host::spawn"
+   ]
+  }
+ ],
+ "reads": "shares.json",
+ "writes": "shares.json",
+ "errors": [
+  {
+   "when": "раздача уже убрана",
+   "shows": "«такой раздачи нет»",
+   "at": [
+    "src-tauri/src/core.rs#Node::renew_once"
+   ]
+  },
+  {
+   "when": "это обычная раздача",
+   "shows": "«это не одноразовая раздача»",
+   "at": [
+    "src-tauri/src/core.rs#Node::renew_once"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#once_link_renew_stale_spawn_expiry_limit"
+ ],
+ "verify": "cargo test once_link_renew_stale_spawn_expiry_limit"
+}

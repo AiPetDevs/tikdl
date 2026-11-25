@@ -1,0 +1,62 @@
+{
+ "id": "feature.stop-share",
+ "name": "Остановить раздачу",
+ "user": "Нажать «Остановить» в строке раздачи — по ссылке больше ничего не отдаётся; строка исчезает.",
+ "trigger": "Кнопка «Остановить» / «Убрать»; tikdl stop <id>",
+ "input": "id раздачи",
+ "output": "раздачи нет, ссылка не работает",
+ "steps": [
+  {
+   "comp": "ui.state",
+   "does": "действие",
+   "at": [
+    "ui/state.js#shareActions.stop",
+    "ui/state.js#shareActions.drop"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "stop_share",
+   "at": [
+    "ui/api.js#api.stopShare"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "команда; на Android — выключить службу, если раздач не осталось",
+   "at": [
+    "src-tauri/src/lib.rs#stop_share"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "убрать запись, тег, белый список",
+   "at": [
+    "src-tauri/src/core.rs#Node::stop_share",
+    "src-tauri/src/core.rs#Node::refresh_allow"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "одноразовая — выключить временный узел",
+   "at": [
+    "src-tauri/src/once.rs#Host::stop"
+   ]
+  }
+ ],
+ "reads": "shares.json",
+ "writes": "shares.json, store/ (освобождается сборщиком)",
+ "errors": [
+  {
+   "when": "раздача уже убрана",
+   "shows": "«такой раздачи нет»",
+   "at": [
+    "src-tauri/src/core.rs#Node::stop_share"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#once_link_renew_stale_spawn_expiry_limit"
+ ],
+ "verify": "Остановить → у получателя «не удалось скачать: …»; docs/plans/ACCEPT.md: P0"
+}

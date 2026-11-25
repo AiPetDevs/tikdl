@@ -1,0 +1,54 @@
+{
+ "id": "feature.remove-download",
+ "name": "Убрать загрузку",
+ "user": "Нажать × в строке загрузки — она останавливается и исчезает из списка; недокачанное в хранилище освобождается. Уже выложенные файлы в папке остаются.",
+ "trigger": "Кнопка × в строке загрузки",
+ "input": "id загрузки",
+ "output": "строки нет, место во внутреннем хранилище освобождено",
+ "steps": [
+  {
+   "comp": "ui.screens",
+   "does": "кнопка ×",
+   "at": [
+    "ui/screens/get.js#ACTIONS.remove"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "действие",
+   "at": [
+    "ui/state.js#actions.remove"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "remove_download",
+   "at": [
+    "ui/api.js#api.removeDownload"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "остановить задачу, убрать запись из downloads.json, снять тег",
+   "at": [
+    "src-tauri/src/lib.rs#remove_download"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "снять тег dl-<id> — сборщик удалит данные",
+   "at": [
+    "src-tauri/src/core.rs#Node::forget_download"
+   ]
+  }
+ ],
+ "reads": "downloads.json",
+ "writes": "downloads.json, downloads/ (освобождается)",
+ "config": [
+  "TIKDL_GC_SECS"
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#gc_frees_untagged_download"
+ ],
+ "verify": "cargo test gc_frees_untagged_download; окно: × на недокачанной — размер downloads/ уменьшается за 15 с"
+}

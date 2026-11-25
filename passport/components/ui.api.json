@@ -1,0 +1,29 @@
+{
+ "id": "ui.api",
+ "name": "Мост к Rust",
+ "kind": "мост",
+ "layer": "bridge",
+ "purpose": "Обёртка над invoke/listen Tauri: по функции на каждую команду, api.on для событий, диалоги выбора файлов, перетаскивание, «Показать в Finder», копирование. Вне Tauri подставляет мок.",
+ "not": "Не держит состояние и не решает, что показывать — это ui.state; команды выполняет app.commands.",
+ "code": [
+  "ui/api.js"
+ ],
+ "uses": [
+  {
+   "to": "app.commands",
+   "how": "IPC",
+   "what": "inspect_link, peek_link, start_download, pause_download, remove_download, share_path, list_shares, stop_share, renew_share…"
+  },
+  {
+   "to": "ui.mock",
+   "how": "импорт",
+   "what": "мок вне Tauri"
+  }
+ ],
+ "observe": "Ошибки команд приходят строкой из Rust и показываются в строке или под полем.",
+ "verify": "npm run ui:smoke; cargo tauri dev — окно работает с настоящим ядром",
+ "invariants": [
+  "Интерфейс ходит в Rust только через этот файл (ESLint)."
+ ],
+ "isolate": "Мок: window.__TAURI__ нет → ui/api.mock.js."
+}

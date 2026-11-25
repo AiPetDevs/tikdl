@@ -1,0 +1,83 @@
+{
+ "id": "feature.cli",
+ "name": "Консольная программа",
+ "user": "Раздать и скачать без окна: tikdl serve [--once] <путь> печатает ссылку и этапы; tikdl get <ссылка> <папка> скачивает; tikdl shares — список; tikdl stop <id> — остановить.",
+ "trigger": "tikdl get | serve | shares | stop в терминале",
+ "input": "аргументы",
+ "output": "печать в терминал; код 1 при ошибке",
+ "steps": [
+  {
+   "comp": "app.shell",
+   "does": "main: сначала консольные команды",
+   "at": [
+    "src-tauri/src/main.rs#main"
+   ]
+  },
+  {
+   "comp": "app.cli",
+   "does": "разбор аргументов, свой узел",
+   "at": [
+    "src-tauri/src/lib.rs#cli_main",
+    "src-tauri/src/lib.rs#cli",
+    "src-tauri/src/lib.rs#cli_inner"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "serve: раздача, ожидание Ctrl+C",
+   "at": [
+    "src-tauri/src/core.rs#Node::share",
+    "src-tauri/src/core.rs#Node::list_shares"
+   ]
+  },
+  {
+   "comp": "app.cli",
+   "does": "печать ссылки и этапов одноразовой",
+   "at": [
+    "src-tauri/src/lib.rs#print_share",
+    "src-tauri/src/lib.rs#once_stage"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "get: загрузка",
+   "at": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "get once: закрепить и сообщить «получено»",
+   "at": [
+    "src-tauri/src/core.rs#Node::resolve",
+    "src-tauri/src/core.rs#Node::once_done"
+   ]
+  }
+ ],
+ "reads": "папка данных",
+ "writes": "папка данных, папка назначения",
+ "errors": [
+  {
+   "when": "нет аргумента",
+   "shows": "«нужна ссылка», «нужна папка», «нужен идентификатор раздачи»",
+   "at": [
+    "src-tauri/src/lib.rs#cli_inner"
+   ]
+  },
+  {
+   "when": "ничего не раздаётся",
+   "shows": "«ничего не раздаётся»",
+   "at": [
+    "src-tauri/src/lib.rs#cli_inner"
+   ]
+  },
+  {
+   "when": "общая ошибка",
+   "shows": "«Ошибка: …», код выхода 1",
+   "at": [
+    "src-tauri/src/lib.rs#cli_main"
+   ]
+  }
+ ],
+ "verify": "HOME=<scratch>/a tikdl serve <файл>; HOME=<scratch>/b tikdl get <ссылка> <папка>; docs/plans/evidence/once_live_cli.txt"
+}

@@ -1,0 +1,100 @@
+{
+ "id": "core.node",
+ "name": "Узел",
+ "kind": "модуль ядра",
+ "layer": "core",
+ "purpose": "Запуск и остановка узла iroh: папка данных, ключ узла (0600, испорченный откладывается), два хранилища (store/ — раздачи, downloads/ — загрузки), сохранённый порт, сборщик мусора, ожидание связи с relay.",
+ "not": "Не решает, что раздавать и что скачивать — это core.share и core.download.",
+ "symbols": [
+  "src-tauri/src/core.rs#now_secs",
+  "src-tauri/src/core.rs#Node",
+  "src-tauri/src/core.rs#DATA_DIR_OVERRIDE",
+  "src-tauri/src/core.rs#data_dir",
+  "src-tauri/src/core.rs#load_or_create_key",
+  "src-tauri/src/core.rs#bind_endpoint",
+  "src-tauri/src/core.rs#gc_interval",
+  "src-tauri/src/core.rs#STORE_BUSY",
+  "src-tauri/src/core.rs#Node::start",
+  "src-tauri/src/core.rs#Node::shutdown",
+  "src-tauri/src/core.rs#Node::remove_orphans",
+  "src-tauri/src/core.rs#Node::endpoint",
+  "src-tauri/src/core.rs#Node::wait_online",
+  "src-tauri/src/core.rs#Node::short_id",
+  "src-tauri/src/core.rs#gc_frees_untagged_download"
+ ],
+ "uses": [
+  {
+   "to": "core.paths",
+   "how": "вызов",
+   "what": "write_private, restrict_permissions"
+  },
+  {
+   "to": "core.share",
+   "how": "вызов",
+   "what": "load_shares, refresh_allow"
+  },
+  {
+   "to": "core.once",
+   "how": "вызов",
+   "what": "Host::start_all, stop_all"
+  },
+  {
+   "to": "ext.iroh",
+   "how": "библиотека",
+   "what": "Endpoint, Router, FsStore, GC"
+  },
+  {
+   "to": "data.key",
+   "how": "чтение и запись",
+   "what": "node.key, port",
+   "static": false
+  },
+  {
+   "to": "data.store",
+   "how": "открывает",
+   "what": "store/, downloads/",
+   "static": false
+  }
+ ],
+ "data": {
+  "reads": "node.key, port, shares.json",
+  "writes": "node.key (один раз), port"
+ },
+ "observe": "Строка «Раздача идёт. Узел: …» в CLI; событие node-ready в окне.",
+ "verify": "cd src-tauri && cargo test",
+ "tests": [
+  "src-tauri/src/core.rs#gc_frees_untagged_download"
+ ],
+ "invariants": [
+  "Ключ узла — только владелец (0600), запись атомарная. Испорченный ключ откладывается как node.key.bad, а не перезаписывается молча.",
+  "Хранилище downloads/ к Router не подключено: в сеть уходит только store/."
+ ],
+ "failures": [
+  {
+   "symptom": "«хранилище TikDL уже открыто другим запуском (окно приложения или консольная команда) — закройте его»",
+   "cause": "папку данных держит другой процесс",
+   "look": "ps; закрыть окно или CLI",
+   "refs": [
+    "src-tauri/src/core.rs#STORE_BUSY"
+   ]
+  },
+  {
+   "symptom": "«Ключ узла повреждён (сохранён как …). Создан новый ключ — старые ссылки перестанут работать.»",
+   "cause": "node.key испорчен",
+   "look": "node.key.bad в папке данных",
+   "refs": [
+    "src-tauri/src/core.rs#load_or_create_key"
+   ]
+  },
+  {
+   "symptom": "«порт … занят (…), выбран другой — старые ссылки найдут узел чуть позже»",
+   "cause": "порт занят другой программой",
+   "look": "файл port",
+   "refs": [
+    "src-tauri/src/core.rs#Node::start"
+   ]
+  }
+ ],
+ "isolate": "Тест в одном процессе: Node::start(&temp) — см. core.rs tests.",
+ "code": []
+}

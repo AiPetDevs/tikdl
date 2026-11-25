@@ -1,0 +1,28 @@
+{
+ "id": "delivery.ci",
+ "name": "GitHub Actions",
+ "kind": "CI",
+ "layer": "delivery",
+ "purpose": "build.yml: проверки и сборка dmg/exe/deb/apk на каждый push; pages.yml: публикует страницу-прокладку ui/site на GitHub Pages.",
+ "not": "Не проверяет код сам — запускает delivery.checks и cargo; содержимое страницы — ui.site.",
+ "code": [
+  ".github/workflows/*.yml"
+ ],
+ "uses": [
+  {
+   "to": "delivery.checks",
+   "how": "запуск",
+   "what": "npm run check / шаги проверок",
+   "static": false
+  },
+  {
+   "to": "ui.site",
+   "how": "публикация",
+   "what": "ui/site → Pages",
+   "static": false
+  }
+ ],
+ "observe": "gh run list -R AiPetDevs/tikdl",
+ "verify": "gh run view <id>",
+ "isolate": "Локально — те же команды из шагов workflow."
+}

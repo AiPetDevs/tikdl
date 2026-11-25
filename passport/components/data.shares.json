@@ -1,0 +1,13 @@
+{
+ "id": "data.shares",
+ "name": "Список раздач",
+ "kind": "файл",
+ "layer": "data",
+ "purpose": "shares.json: раздачи (путь, хеш, участники, время), для одноразовых — ключ временного узла, хеш токена, закреплённое устройство, этап.",
+ "not": "Не содержит самих файлов — они в data.store; пишут core.share и core.once.",
+ "code": [],
+ "uses": [],
+ "observe": "tikdl shares",
+ "verify": "ls -l: 0600",
+ "isolate": "HOME=<scratch>."
+}

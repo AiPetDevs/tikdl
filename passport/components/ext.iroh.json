@@ -1,0 +1,13 @@
+{
+ "id": "ext.iroh",
+ "name": "iroh и iroh-blobs",
+ "kind": "библиотека",
+ "layer": "ext",
+ "purpose": "Сеть узлов по ключу (iroh 1.5): прямое соединение с пробиванием NAT или через relay; iroh-blobs 0.105: проверяемая передача блобов, хранилище FsStore, сборщик мусора.",
+ "not": "Не знает про ссылки, запреты и одноразовость — это ядро TikDL (core.*).",
+ "code": [],
+ "uses": [],
+ "observe": "RUST_LOG=iroh=debug",
+ "verify": "cargo test",
+ "isolate": "docs/ONCE_LINKS.md §7 — факты API, проверенные отдельным крейтом."
+}

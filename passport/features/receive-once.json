@@ -1,0 +1,108 @@
+{
+ "id": "feature.receive-once",
+ "name": "Получить по одноразовой ссылке",
+ "user": "Открыть одноразовую ссылку и нажать «Скачать»: компьютер закрепляет её за собой и скачивает; можно прерваться и докачать. Когда всё в папке, отправитель узнаёт «получено», и ссылка сгорает для всех.",
+ "trigger": "«Скачать» или «Что внутри?» в карточке одноразовой ссылки; tikdl get <once-ссылка> <папка>",
+ "input": "одноразовая ссылка, папка",
+ "output": "файлы в папке; у отправителя «получено устройством … — ссылка сгорела»",
+ "steps": [
+  {
+   "comp": "app.commands",
+   "does": "проверка «уже получено на этом компьютере»",
+   "at": [
+    "src-tauri/src/lib.rs#already_received",
+    "src-tauri/src/lib.rs#start_download"
+   ]
+  },
+  {
+   "comp": "app.jobs",
+   "does": "задача загрузки",
+   "at": [
+    "src-tauri/src/lib.rs#spawn_job"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "claim: закрепить; получить корень и адрес временного узла",
+   "at": [
+    "src-tauri/src/core.rs#Node::resolve",
+    "src-tauri/src/once.rs#request",
+    "src-tauri/src/once.rs#claim",
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "comp": "core.download",
+   "does": "обычная загрузка с временного узла под тегом dl-once-…",
+   "at": [
+    "src-tauri/src/core.rs#Node::download"
+   ]
+  },
+  {
+   "comp": "app.jobs",
+   "does": "done + ack_pending до снятия тега; «получено» отправителю (5 попыток, потом при запуске)",
+   "at": [
+    "src-tauri/src/lib.rs#send_done"
+   ]
+  },
+  {
+   "comp": "core.once",
+   "does": "запрос done",
+   "at": [
+    "src-tauri/src/core.rs#Node::once_done",
+    "src-tauri/src/once.rs#done"
+   ]
+  }
+ ],
+ "reads": "сеть",
+ "writes": "папка назначения, downloads.json (ack_pending)",
+ "errors": [
+  {
+   "when": "закреплена за другим",
+   "shows": "«ссылка уже использована на другом устройстве — попросите отправителя прислать новую»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "when": "остановлена или заменена",
+   "shows": "«ссылка недействительна — отправитель её остановил или выдал новую»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "when": "получена или истекла",
+   "shows": "«ссылка больше не действует: файлы уже получены или истёк срок»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "when": "отправитель изменил файлы",
+   "shows": "«отправитель изменил файлы — раздача остановлена»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "when": "отправитель не смог записать привязку",
+   "shows": "«у отправителя не удалось сохранить привязку — попробуйте ещё раз»",
+   "at": [
+    "src-tauri/src/once.rs#status"
+   ]
+  },
+  {
+   "when": "отправитель не в сети или ссылка сгорела",
+   "shows": "«отправитель не в сети, или ссылка уже не действует (получена, остановлена или истекла)»",
+   "at": [
+    "src-tauri/src/once.rs#request"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#once_link_one_device_then_burned",
+  "src-tauri/src/core.rs#once_link_concurrent_claims_one_winner"
+ ],
+ "verify": "cargo test once_; docs/ONCE_LINKS.md §6"
+}

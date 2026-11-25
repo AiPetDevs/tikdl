@@ -1,0 +1,132 @@
+{
+ "items": [
+  {
+   "id": "node.key",
+   "what": "секретный ключ основного узла; из него id в обычных ссылках",
+   "where": "<папка данных>/node.key",
+   "format": "32 байта",
+   "perm": "0600",
+   "writer": "core.node",
+   "readers": [
+    "core.node"
+   ],
+   "at": [
+    "src-tauri/src/core.rs#load_or_create_key"
+   ],
+   "note": "Удалить = все обычные ссылки перестанут работать. Испорченный откладывается как node.key.bad."
+  },
+  {
+   "id": "port",
+   "what": "сохранённый UDP-порт узла",
+   "where": "<папка данных>/port",
+   "format": "число текстом",
+   "perm": "обычные",
+   "writer": "core.node",
+   "readers": [
+    "core.node"
+   ],
+   "at": [
+    "src-tauri/src/core.rs#Node::start"
+   ],
+   "note": "Занят — берётся другой, старые ссылки находят узел чуть позже."
+  },
+  {
+   "id": "shares.json",
+   "what": "раздачи: путь, корень, участники, время; для одноразовых — ключ временного узла, хеш токена, устройство, этап",
+   "where": "<папка данных>/shares.json",
+   "format": "JSON",
+   "perm": "0600",
+   "writer": "core.share, core.once",
+   "readers": [
+    "core.share",
+    "core.once"
+   ],
+   "at": [
+    "src-tauri/src/core.rs#SHARES_FILE",
+    "src-tauri/src/core.rs#load_shares",
+    "src-tauri/src/core.rs#save_shares"
+   ],
+   "note": "Испорчен — список начинается заново с сообщением в журнале."
+  },
+  {
+   "id": "downloads.json",
+   "what": "загрузки окна: ссылка, папка, состояние, имя, ack_pending/ack_tries для одноразовых",
+   "where": "<папка данных>/downloads.json",
+   "format": "JSON",
+   "perm": "0600",
+   "writer": "app.state",
+   "readers": [
+    "app.state",
+    "app.shell"
+   ],
+   "at": [
+    "src-tauri/src/lib.rs#DOWNLOADS_FILE",
+    "src-tauri/src/lib.rs#load_downloads",
+    "src-tauri/src/lib.rs#save_downloads"
+   ],
+   "note": "Консольная команда get его не ведёт."
+  },
+  {
+   "id": "store",
+   "what": "хранилище раздач (iroh-blobs FsStore), теги share-*",
+   "where": "<папка данных>/store/",
+   "format": "база iroh-blobs + файлы",
+   "perm": "обычные",
+   "writer": "core.share",
+   "readers": [
+    "core.share",
+    "core.once",
+    "ext.iroh"
+   ],
+   "at": [
+    "src-tauri/src/core.rs#Node::start"
+   ],
+   "note": "Единственное хранилище, которое отдаётся в сеть (по белому списку). Один процесс за раз."
+  },
+  {
+   "id": "downloads",
+   "what": "хранилище загрузок до выкладки, теги dl-*",
+   "where": "<папка данных>/downloads/ (blobs.db, data/)",
+   "format": "база iroh-blobs + файлы",
+   "perm": "обычные",
+   "writer": "core.download",
+   "readers": [
+    "core.download"
+   ],
+   "at": [
+    "src-tauri/src/core.rs#Node::start",
+    "src-tauri/src/core.rs#Node::remove_orphans"
+   ],
+   "note": "К сети не подключено. Без тега данные удаляет сборщик (TIKDL_GC_SECS)."
+  },
+  {
+   "id": "imports",
+   "what": "Android: копии выбранных файлов для раздачи",
+   "where": "<app_data_dir>/imports/",
+   "format": "файлы",
+   "perm": "приватная папка приложения",
+   "writer": "app.android",
+   "readers": [
+    "core.share"
+   ],
+   "at": [
+    "src-tauri/src/lib.rs#IMPORTS_DIR",
+    "src-tauri/src/android.rs#import_content"
+   ],
+   "note": "Только Android."
+  },
+  {
+   "id": "part-files",
+   "what": "временные файлы выкладки",
+   "where": "папка назначения: .<имя>.tikdl-part",
+   "format": "файл",
+   "perm": "как у папки",
+   "writer": "core.download",
+   "readers": [],
+   "at": [
+    "src-tauri/src/paths.rs#part_name"
+   ],
+   "note": "После переименования их нет; остаток — след аварийного выхода."
+  }
+ ]
+}

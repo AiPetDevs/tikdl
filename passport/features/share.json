@@ -1,0 +1,129 @@
+{
+ "id": "feature.share",
+ "name": "Раздать файлы или папку",
+ "user": "На вкладке «Раздать» выбрать файлы или папку (или перетащить в окно) — получить ссылку, «Скопировать» её и отправить. Раздача работает, пока TikDL запущен (в строке меню), и переживает перезапуск.",
+ "trigger": "«Выбрать файлы» / «Выбрать папку» / перетаскивание в окно",
+ "input": "пути",
+ "output": "строка раздачи со ссылкой tikdl:// и https-ссылкой для мессенджеров",
+ "steps": [
+  {
+   "comp": "ui.screens",
+   "does": "кнопки выбора",
+   "at": [
+    "ui/screens/share.js#ShareScreen"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "системный диалог, перетаскивание",
+   "at": [
+    "ui/api.js#api.pickPaths",
+    "ui/api.js#api.onDragDrop"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "по пути за раз, прогресс подготовки, ошибки остаются видны",
+   "at": [
+    "ui/state.js#share",
+    "ui/state.js#shareMany",
+    "ui/state.js#preparingView"
+   ]
+  },
+  {
+   "comp": "ui.api",
+   "does": "share_path(path, once=false)",
+   "at": [
+    "ui/api.js#api.sharePath"
+   ]
+  },
+  {
+   "comp": "app.commands",
+   "does": "прогресс подсчёта (share-progress), раздача",
+   "at": [
+    "src-tauri/src/lib.rs#share_path"
+   ]
+  },
+  {
+   "comp": "core.paths",
+   "does": "запрет системных и личных папок",
+   "at": [
+    "src-tauri/src/paths.rs#forbidden_share"
+   ]
+  },
+  {
+   "comp": "core.share",
+   "does": "обход папки без скрытого, подсчёт в store/, тег, запись в shares.json, белый список",
+   "at": [
+    "src-tauri/src/core.rs#Node::share",
+    "src-tauri/src/core.rs#Node::refresh_allow",
+    "src-tauri/src/core.rs#save_shares"
+   ]
+  },
+  {
+   "comp": "core.links",
+   "does": "ссылка: ключ узла + relay, без IP; https-обёртка",
+   "at": [
+    "src-tauri/src/core.rs#make_link",
+    "src-tauri/src/core.rs#public_addr",
+    "src-tauri/src/core.rs#web_link"
+   ]
+  },
+  {
+   "comp": "ui.state",
+   "does": "строка раздачи",
+   "at": [
+    "ui/state.js#refreshShares",
+    "ui/state.js#shareView"
+   ]
+  }
+ ],
+ "reads": "исходные файлы",
+ "writes": "store/, shares.json",
+ "config": [
+  "TIKDL_LINK_BASE"
+ ],
+ "errors": [
+  {
+   "when": "системная или личная папка",
+   "shows": "«это системная папка — TikDL её не раздаёт», «это вся домашняя папка — раздайте нужную папку внутри неё» и др.",
+   "at": [
+    "src-tauri/src/paths.rs#forbidden_share"
+   ]
+  },
+  {
+   "when": "путь исчез",
+   "shows": "«путь не найден: …»",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "when": "в папке только скрытое",
+   "shows": "«в папке только скрытые и служебные файлы (…) — они не раздаются»",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "when": "пустая папка",
+   "shows": "«в папке нет файлов»",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  },
+  {
+   "when": "файл изменился во время подсчёта",
+   "shows": "«файл … подменили во время раздачи — раздайте заново»",
+   "at": [
+    "src-tauri/src/core.rs#Node::share"
+   ]
+  }
+ ],
+ "tests": [
+  "src-tauri/src/core.rs#share_and_download_between_two_nodes",
+  "src-tauri/src/paths.rs#forbidden_share_home_rules",
+  "src-tauri/src/paths.rs#forbidden_share_system_rules"
+ ],
+ "verify": "cargo test; docs/plans/ACCEPT.md: P0, «Share folder», «Drag and drop»"
+}

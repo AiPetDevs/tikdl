@@ -1,0 +1,151 @@
+{
+  "app": "TikDL",
+  "version": "0.1.0",
+  "summary": "Настольное приложение, консольная программа и сборка под Android: раздать файл или папку по ссылке и скачать по ссылке, напрямую между устройствами (iroh: пробивание NAT, relay, если напрямую нельзя). Пауза и докачка, в том числе после перезапуска. Одноразовая ссылка — скачать сможет одно устройство, после получения сгорает.",
+  "stack": [
+    "Tauri 2 (окно, строка меню, deep link tikdl://, Android)",
+    "Rust: iroh 1.5, iroh-blobs 0.105, tokio",
+    "интерфейс: чистый JS без сборки (ui/), слои по ui-architect",
+    "Android: Kotlin-служба переднего плана, JNI (src-tauri/src/android.rs)",
+    "CI: GitHub Actions (сборка dmg/exe/deb/apk, страница-прокладка на Pages)"
+  ],
+  "language": "Карточки паспорта — по-русски (их читает владелец). Код и остальные документы проекта — по-английски.",
+  "run": {
+    "app (dev)": "cd src-tauri && cargo tauri dev",
+    "app (bundle)": "cd src-tauri && cargo tauri build   # → target/release/bundle/macos/TikDL.app",
+    "dmg (universal)": "cd src-tauri && cargo tauri build --target universal-apple-darwin",
+    "cli": "HOME=<отдельная папка> src-tauri/target/release/tikdl serve <путь> | get <ссылка> <папка> | shares | stop <id>",
+    "ui в браузере (мок)": "(cd ui && python3 -m http.server 8765 --bind 127.0.0.1) → http://127.0.0.1:8765/index.html, витрина #/kit",
+    "android": "cd src-tauri && cargo tauri android build   # подпись — README, раздел Android"
+  },
+  "checks": {
+    "passport": "npm run passport:check",
+    "rust": "cd src-tauri && cargo test",
+    "ui": "npm run ui:check && npm run lint",
+    "ui smoke": "npm run ui:smoke   # сам поднимает сервер ui/",
+    "all": "npm run check"
+  },
+  "dataDir": {
+    "macOS": "~/Library/Application Support/tikdl/",
+    "Linux": "$XDG_DATA_HOME/tikdl или ~/.local/share/tikdl/",
+    "Windows": "%LOCALAPPDATA%\\tikdl\\",
+    "code": "src-tauri/src/core.rs#data_dir",
+    "Android": "приватная папка приложения: <app_data_dir>/tikdl, выбранные файлы — <app_data_dir>/imports"
+  },
+  "bridge": "ui/api.js",
+  "sources": [
+    "src-tauri/src/**/*.rs",
+    "src-tauri/build.rs",
+    "ui/**/*.{js,html,css}",
+    "scripts/*.{mjs,html}",
+    "eslint.config.js",
+    ".github/workflows/*.yml"
+  ],
+  "layers": [
+    "ui",
+    "bridge",
+    "app",
+    "core",
+    "data",
+    "ext",
+    "delivery"
+  ],
+  "layerNames": {
+    "ui": "Интерфейс: экраны и кит",
+    "bridge": "Интерфейс: состояние и мост",
+    "app": "Приложение (lib.rs, android.rs)",
+    "core": "Ядро передачи",
+    "data": "Данные на диске",
+    "ext": "Снаружи",
+    "delivery": "Сборка и проверки"
+  },
+  "invariants": [
+    "В сеть основной узел отдаёт только хранилище store/ и только хеши живых публичных раздач (allow). Хранилище downloads/ к сети не подключено.",
+    "Интерфейс ходит в Rust только через ui/api.js. Экраны читают данные только через ui/state.js (проверяет ESLint).",
+    "Ничего не скачивается без явного действия пользователя: входящая ссылка ждёт «Скачать».",
+    "Имена из чужой раздачи проходят paths::safe_join до записи на диск. Существующие файлы не перезаписываются.",
+    "Системный диск и папки, домашняя папка целиком, скрытое в ней, ~/Library и папка TikDL не раздаются никогда (paths::forbidden_share).",
+    "В ссылке нет IP раздающего: только ключ узла и relay (core.rs public_addr). В одноразовой — и ключа основного узла нет.",
+    "Одноразовую ссылку скачивает только первое закрепившееся устройство; после «получено» временный узел выключается навсегда.",
+    "Ключ узла — только владелец (0600), запись атомарная. Испорченный ключ откладывается, а не перезаписывается молча.",
+    "Выкладка скачанного — копией (reflink на APFS), не переносом (TryReference). См. ловушку в HANDOFF.md."
+  ],
+  "decisions": [
+    {
+      "title": "Выкладка скачанного копией, а не переносом",
+      "ref": "docs/IDEAS_LEDGER.md"
+    },
+    {
+      "title": "Ловушки: TryReference при выкладке, запуск через open, одна папка данных у окна и консоли",
+      "ref": "HANDOFF.md"
+    },
+    {
+      "title": "Аудит и закрытые риски P0/P1",
+      "ref": "docs/AUDIT_2026-11-23.md"
+    },
+    {
+      "title": "Остаточные риски после повторного аудита",
+      "ref": "docs/AUDIT_2026-11-25.md"
+    },
+    {
+      "title": "Замечания владельца об интерфейсе (R1–R3)",
+      "ref": "docs/UI_REMARKS.md"
+    },
+    {
+      "title": "Сценарии приёмки и их результаты",
+      "ref": "docs/plans/ACCEPT.md"
+    },
+    {
+      "title": "Одноразовые ссылки: устройство, протокол, проверка (реализовано)",
+      "ref": "docs/ONCE_LINKS.md"
+    },
+    {
+      "title": "Чужие решения одноразовых ссылок (Firefox Send, OnionShare, croc…)",
+      "ref": "docs/research/ONCE_PRIOR_ART.md"
+    }
+  ],
+  "mapColumns": [
+    {
+      "name": "Экраны и кит",
+      "layers": [
+        "ui"
+      ]
+    },
+    {
+      "name": "Состояние и мост",
+      "layers": [
+        "bridge"
+      ]
+    },
+    {
+      "name": "Приложение (lib.rs)",
+      "layers": [
+        "app"
+      ]
+    },
+    {
+      "name": "Ядро передачи",
+      "layers": [
+        "core"
+      ]
+    },
+    {
+      "name": "Данные, снаружи, сборка",
+      "layers": [
+        "data",
+        "ext",
+        "delivery"
+      ]
+    }
+  ],
+  "adapters": {
+    "tauri": {
+      "listen": "\\bapi\\.on\\(\\s*'([\\w:-]+)'"
+    }
+  },
+  "externalLayers": [
+    "data",
+    "ext",
+    "delivery"
+  ]
+}
